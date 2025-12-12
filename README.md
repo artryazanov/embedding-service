@@ -110,3 +110,41 @@ docker run -d -p 8000:8000 --name embedding-service-cpu embedding-service:cpu
   ]
 }
 ```
+
+### Train/Fine-tune Model (TSDAE)
+**Endpoint:** `POST /train-tsdae`
+
+Starts a background entry to fine-tune the model using the TSDAE (Transformer-based Denoising AutoEncoder) method.
+
+**Request:**
+```json
+{
+  "text_content": "sentence one\nsentence two\n...",
+  "model_name": "my-finetuned-model"
+}
+```
+
+**Response:**
+```json
+{
+  "job_id": "uuid-string",
+  "status": "pending"
+}
+```
+
+### Check Training Status
+**Endpoint:** `GET /train-status/{job_id}`
+
+Checks the progress of a running training job.
+
+**Response:**
+```json
+{
+  "status": "running",
+  "progress": 45,
+  "message": "Training...",
+  "error": null,
+  "steps": 100,
+  "epoch": 0
+}
+```
