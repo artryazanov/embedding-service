@@ -32,7 +32,10 @@ docker build -t embedding-service:gpu .
 You MUST pass `--gpus all` to enable GPU access inside the container.
 
 ```bash
-docker run -d -p 8000:8000 --gpus all --name embedding-service embedding-service:gpu
+docker run -d -p 8000:8000 --gpus all \
+  -v $(pwd)/models:/app/models \
+  -e MODEL_NAME=intfloat/multilingual-e5-large \
+  --name embedding-service embedding-service:gpu
 ```
 
 > **Note:** If you run this image without `--gpus all` (or on a machine without a GPU), it will fall back to CPU, but the image size will be larger than the dedicated CPU-optimized version.
@@ -60,8 +63,46 @@ docker build -t embedding-service:cpu .
 
 **Step 3: Run the container**
 ```bash
-docker run -d -p 8000:8000 --name embedding-service-cpu embedding-service:cpu
+docker run -d -p 8000:8000 \
+  -v $(pwd)/models:/app/models \
+  -e MODEL_NAME=intfloat/multilingual-e5-large \
+  --name embedding-service-cpu embedding-service:cpu
 ```
+
+---
+
+### 3️⃣ Using Custom/Local Models
+
+By default, the service downloads the model specified by `MODEL_NAME` (default: `intfloat/multilingual-e5-large`) from HuggingFace.
+
+To use a **local model** (e.g., for offline usage or a custom fine-tuned model):
+
+1. **Create a `models` directory** on your host machine.
+2. **Download or place your model** inside this directory.
+   - Example structure:
+     ```
+     ./models/
+     └── my-custom-model/
+         ├── config.json
+         ├── pytorch_model.bin
+         ├── tokenizer.json
+         └── ...
+     ```
+3. **Run the container** with:
+   - `-v $(pwd)/models:/app/models`: Mounts your local models directory into the container.
+   - `-e MODEL_NAME=my-custom-model`: Tells the app which model folder to look for.
+
+**Example Command:**
+```bash
+docker run -d -p 8000:8000 --gpus all \
+  -v $(pwd)/models:/app/models \
+  -e MODEL_NAME=my-custom-model \
+  embedding-service:gpu
+```
+
+The service will check if `/app/models/my-custom-model` exists.
+- If **Yes**: It loads the model locally.
+- If **No**: It attempts to download `my-custom-model` from HuggingFace.
 
 ## 📚 API Usage
 

@@ -7,6 +7,7 @@ import os
 import uuid
 import nltk
 from typing import Dict, Any, List
+import os
 
 app = FastAPI()
 
@@ -19,7 +20,17 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Loading model on {device}...")
 
 # 2. Load the model ONCE at startup
-model = SentenceTransformer('intfloat/multilingual-e5-large', device=device)
+model_name = os.getenv('MODEL_NAME', 'intfloat/multilingual-e5-large')
+local_model_path = f"./models/{model_name}"
+
+if os.path.exists(local_model_path):
+    print(f"Loading local model from {local_model_path} on {device}...")
+    model_name_or_path = local_model_path
+else:
+    print(f"Loading model {model_name} from HuggingFace on {device}...")
+    model_name_or_path = model_name
+
+model = SentenceTransformer(model_name_or_path, device=device)
 
 # --- Vectorization Logic ---
 
@@ -126,7 +137,7 @@ def run_training_task(job_id: str, req: TrainRequest):
 
         # 4. Loss Function
         # We use the existing loaded model for training
-        train_loss = losses.DenoisingAutoEncoderLoss(model, decoder_name_or_path='intfloat/multilingual-e5-large', tie_encoder_decoder=True)
+        train_loss = losses.DenoisingAutoEncoderLoss(model, decoder_name_or_path=model_name_or_path, tie_encoder_decoder=True)
 
         # Calculate steps
         total_steps = len(train_dataloader)
