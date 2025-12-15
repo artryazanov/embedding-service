@@ -1,6 +1,6 @@
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer, datasets, losses
+from sentence_transformers import SentenceTransformer, datasets, losses, InputExample
 from torch.utils.data import DataLoader
 import torch
 import os
@@ -31,6 +31,7 @@ else:
     model_name_or_path = model_name
 
 model = SentenceTransformer(model_name_or_path, device=device)
+model.max_seq_length = 512
 
 # --- Vectorization Logic ---
 
@@ -109,66 +110,116 @@ def run_training_task(job_id: str, req: TrainRequest):
         model_name = req.model_name
         jobs[job_id]["status"] = "running"
         jobs[job_id]["message"] = "Preparing data..."
+        
+        # --- GPU MEMORY MANAGEMENT START ---
+        # Move the global serving model to CPU to free up VRAM for training
+        global model
+        print(f"[{job_id}] Moving global serving model to CPU to free VRAM...")
+        model.to('cpu')
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        # -----------------------------------
 
-        # 1. Read data
-        train_sentences = req.text_content.splitlines()
-        # Filter empty lines
-        train_sentences = [s.strip() for s in train_sentences if s.strip()]
-
-        if not train_sentences:
-            jobs[job_id]["status"] = "failed"
-            jobs[job_id]["error"] = "Content is empty"
-            return
-
-        print(f"[{job_id}] Loaded {len(train_sentences)} sentences.")
-
-        # 2. Create dataset
-        # TSDAE requires just a list of sentences
-        train_dataset = datasets.DenoisingAutoEncoderDataset(train_sentences)
-
-        # 3. DataLoader
-        batch_size = 8 # Adjusted from 1 to 8 for better performance on large models like E5-large if GPU permits, usually 8 is okay. User had 1.
-        # User code had batch_size=1. Reverting to 1? Encoded E5-large is big.
-        # Let's stick closer to user provided code but maybe 4 or 8 is better.
-        # The user provided code had batch_size=1. I will stick to the user's code to be safe,
-        # but 1 is very slow. I'll use 4 as a compromise or stick to 1 if strict adaptation.
-        # I'll stick to user's 1 for safety, as I don't know their VRAM.
-        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=True)
-
-        # 4. Loss Function
-        # We use the existing loaded model for training
-        train_loss = losses.DenoisingAutoEncoderLoss(model, decoder_name_or_path=model_name_or_path, tie_encoder_decoder=True)
-
-        # Calculate steps
-        total_steps = len(train_dataloader)
-        jobs[job_id]["total_steps"] = total_steps
-        jobs[job_id]["message"] = "Training..."
-
-        # 5. Start training
-        print(f"[{job_id}] Starting fit...")
-        model.fit(
-            train_objectives=[(train_dataloader, train_loss)],
-            epochs=1,
-            weight_decay=0,
-            scheduler='constantlr',
-            optimizer_params={'lr': 3e-5},
-            show_progress_bar=False, # We use our own tracking
-            callback=ProgressCallback(job_id, total_steps)
-        )
-        print(f"[{job_id}] Fit complete.")
-
-        # 6. Save model
-        save_dir = "./models"
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
+        try:
+            # 1. Parsing and splitting data into pairs
+            raw_lines = req.text_content.splitlines()
+            train_examples = []
             
-        save_path = os.path.join(save_dir, model_name)
-        model.save(save_path)
-        print(f"[{job_id}] Model saved to {save_path}")
+            for line in raw_lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Try to split Title and Characteristics+Description
+                # In your data the separator is " Характеристики: "
+                parts = line.split(" Характеристики: ")
+                
+                if len(parts) == 2:
+                    # part[0] = Title + Category
+                    # part[1] = Characteristics + Description itself
+                    
+                    # FORM A CORRECT PAIR FOR E5
+                    # The model learns to bring closer the "characteristics" vector and the "description" vector
+                    q_text = f"query: {parts[0].strip()}" 
+                    p_text = f"passage: {parts[1].strip()}"
+                    
+                    train_examples.append(InputExample(texts=[q_text, p_text]))
 
-        jobs[job_id]["status"] = "completed"
-        jobs[job_id]["progress"] = 100
-        jobs[job_id]["message"] = f"Model saved to {save_path}"
+            if not train_examples:
+                jobs[job_id]["status"] = "failed"
+                jobs[job_id]["error"] = "No valid data pairs found (check 'Характеристики:' separator within the data)"
+                return
+
+            print(f"[{job_id}] Created {len(train_examples)} training pairs.")
+
+            # 2. Load a FRESH model instance for training
+            # We start from the base model defined in environment, or default.
+            env_model_name = os.getenv('MODEL_NAME', 'intfloat/multilingual-e5-large')
+            local_base_path = f"./models/{env_model_name}"
+            
+            # Determine where to load the BASE model from
+            if os.path.exists(local_base_path):
+                print(f"[{job_id}] Loading base model from local path: {local_base_path}...")
+                train_model_path = local_base_path
+            else:
+                print(f"[{job_id}] Loading base model from HuggingFace: {env_model_name}...")
+                train_model_path = env_model_name
+
+            # Initialize the fresh model for training
+            print(f"[{job_id}] Initializing fresh SentenceTransformer for training from {train_model_path}...")
+            train_model = SentenceTransformer(train_model_path, device=device)
+            train_model.max_seq_length = 512
+
+            # 3. DataLoader
+            # IMPORTANT: For MultipleNegativesRankingLoss, batch_size must be > 1
+            # The larger the batch, the better the quality (since other batch elements serve as negative examples)
+            # For RTX 4080, you can safely set 16 or 32.
+            train_dataloader = DataLoader(train_examples, batch_size=4, shuffle=True)
+
+            # 4. Loss Function (The most powerful function for retrieval)
+            # It says: "Vector A should be similar to Vector B, and dissimilar to all other vectors in this batch"
+            train_loss = losses.MultipleNegativesRankingLoss(train_model)
+
+            # Step count
+            total_steps = len(train_dataloader) # 1 epoch is usually enough for fine-tuning
+            jobs[job_id]["total_steps"] = total_steps
+            jobs[job_id]["message"] = "Training (Contrastive Learning)..."
+
+            # 5. Start training
+            print(f"[{job_id}] Starting fit...")
+            train_model.fit(
+                train_objectives=[(train_dataloader, train_loss)],
+                epochs=1, # One epoch is enough! Otherwise it typically overfits.
+                warmup_steps=int(total_steps * 0.1), # 10% warmup
+                optimizer_params={'lr': 2e-5},       # Careful Learning Rate
+                show_progress_bar=False,
+                use_amp=True,
+                callback=ProgressCallback(job_id, total_steps)
+            )
+            print(f"[{job_id}] Fit complete.")
+
+            # 6. Save
+            save_dir = "./models"
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+                
+            save_path = os.path.join(save_dir, model_name)
+            train_model.save(save_path)
+            print(f"[{job_id}] Model saved to {save_path}")
+
+            jobs[job_id]["status"] = "completed"
+            jobs[job_id]["progress"] = 100
+            jobs[job_id]["message"] = f"Model saved to {save_path}"
+
+        finally:
+            # --- GPU MEMORY MANAGEMENT END ---
+            # Restore the global serving model to GPU
+            print(f"[{job_id}] Restoring global serving model to {device}...")
+            model.to(device)
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            print(f"[{job_id}] Serving model restored.")
+            # ---------------------------------
 
     except Exception as e:
         print(f"[{job_id}] Error: {e}")
