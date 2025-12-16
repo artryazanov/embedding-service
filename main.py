@@ -142,7 +142,7 @@ def train_worker(job_id: str, req: TrainRequest):
         for line in raw_lines:
             line = line.strip()
             if not line: continue
-            parts = line.split(" Характеристики: ")
+            parts = line.split("\t")
             if len(parts) == 2:
                 q = f"query: {parts[0].strip()}"
                 p = f"passage: {parts[1].strip()}"

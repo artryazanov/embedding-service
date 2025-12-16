@@ -159,15 +159,15 @@ Starts a background entry to fine-tune the model using Contrastive Learning (Mul
 
 **Input Format:**
 Each line in `text_content` must follow the format:
-`Query Text Характеристики: Passage Text`
+`Query Text<TAB>Passage Text`
 
-The separator ` Характеристики: ` (note the spaces) is **mandatory**.
+The separator is a **tab character** (`\t`).
 Lines that do not match this format will be ignored.
 
 **Request:**
 ```json
 {
-  "text_content": "Product A Характеристики: Description of Product A\nProduct B Характеристики: Description of Product B",
+  "text_content": "Product A\tDescription of Product A\nProduct B\tDescription of Product B",
   "model_name": "my-finetuned-model"
 }
 ```
