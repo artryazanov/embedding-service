@@ -152,15 +152,22 @@ The service will check if `/app/models/my-custom-model` exists.
 }
 ```
 
-### Train/Fine-tune Model (TSDAE)
-**Endpoint:** `POST /train-tsdae`
+### Train/Fine-tune Model
+**Endpoint:** `POST /fine-tune`
 
-Starts a background entry to fine-tune the model using the TSDAE (Transformer-based Denoising AutoEncoder) method.
+Starts a background entry to fine-tune the model using Contrastive Learning (MultipleNegativesRankingLoss).
+
+**Input Format:**
+Each line in `text_content` must follow the format:
+`Query Text Характеристики: Passage Text`
+
+The separator ` Характеристики: ` (note the spaces) is **mandatory**.
+Lines that do not match this format will be ignored.
 
 **Request:**
 ```json
 {
-  "text_content": "sentence one\nsentence two\n...",
+  "text_content": "Product A Характеристики: Description of Product A\nProduct B Характеристики: Description of Product B",
   "model_name": "my-finetuned-model"
 }
 ```
