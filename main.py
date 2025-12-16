@@ -29,10 +29,16 @@ def load_serving_model():
     cleanup_memory()
     
     local_path = f"./models/{model_name_env}"
-    path_to_load = local_path if os.path.exists(local_path) else model_name_env
     
-    print(f"[SYSTEM] Loading serving model from {path_to_load} to {device}...")
-    serving_model = SentenceTransformer(path_to_load, device=device)
+    if os.path.exists(local_path):
+        print(f"[SYSTEM] Loading serving model from local path: {local_path} to {device}...")
+        serving_model = SentenceTransformer(local_path, device=device)
+    else:
+        print(f"[SYSTEM] Model not found locally. Downloading {model_name_env} to {device}...")
+        serving_model = SentenceTransformer(model_name_env, device=device)
+        print(f"[SYSTEM] Saving model to {local_path} for future use...")
+        serving_model.save(local_path)
+        
     serving_model.max_seq_length = 512
     print("[SYSTEM] Serving model ready.")
 
