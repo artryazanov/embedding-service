@@ -196,3 +196,23 @@ Checks the progress of a running training job.
   "epoch": 0
 }
 ```
+
+## 🧪 Development & Testing
+
+### Running Tests Locally
+To run the test suite, you need to install the development dependencies:
+
+```bash
+pip install -r requirements.txt
+pip install pytest httpx
+```
+
+Then run the tests:
+
+```bash
+pytest tests/
+```
+
+## License
+
+This project is released under the [Unlicense](LICENSE).
