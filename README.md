@@ -125,6 +125,19 @@ The service uses a **Smart Strategy Pattern** to automatically configure itself 
 
 > **Note:** If you use a custom fine-tuned model, ensure its name contains "e5" or "bge-m3" so the service knows how to handle it.
 
+### 🔗 Model Details
+
+- **[intfloat/multilingual-e5-large](https://huggingface.co/intfloat/multilingual-e5-large)**
+  - A specific model from the **E5** family (`E5-Large-V2`).
+  - **Languages**: 94+ languages.
+  - **Context**: 512 tokens.
+  - **Prefixes**: Mandatory (`query: ` for queries, `passage: ` for documents).
+
+- **[BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3)**
+  - A state-of-the-art multilingual model (100+ languages).
+  - **Context**: 8192 tokens (supports long documents).
+  - **Prefixes**: Not required / automatically handled by the model's tokenizer (though this service treats it as no-prefix by default).
+
 ## 📚 API Usage
 
 ### Health/Docs
