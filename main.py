@@ -1,27 +1,28 @@
 import gc
+import logging
 import os
 import uuid
-import logging
-from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+import datasets
 import torch
-from fastapi import FastAPI, BackgroundTasks, HTTPException, status
+from fastapi import BackgroundTasks, FastAPI, HTTPException, status
 from pydantic import BaseModel
 from sentence_transformers import (
-    SentenceTransformer, 
-    losses, 
-    InputExample, 
-    SentenceTransformerTrainer, 
-    SentenceTransformerTrainingArguments
+    InputExample,
+    SentenceTransformer,
+    SentenceTransformerTrainer,
+    SentenceTransformerTrainingArguments,
+    losses,
 )
 from transformers import TrainerCallback
-import datasets
 
 # --- Configuration & Logging ---
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler()]
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -30,9 +31,11 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 # --- Domain Models ---
 
+
 @dataclass
 class ModelProfile:
     """Describes the characteristics and requirements of a specific model."""
+
     name: str
     max_seq_length: int
     requires_prefix: bool
@@ -45,6 +48,7 @@ class ModelProfile:
     def passage_prefix(self) -> str:
         return "passage: " if self.requires_prefix else ""
 
+
 def detect_model_profile(model_name_path: str) -> ModelProfile:
     """
     Configuration factory. Determines settings based on the model name.
@@ -55,17 +59,13 @@ def detect_model_profile(model_name_path: str) -> ModelProfile:
     if "e5" in normalized_name:
         logger.info(f"Detected E5-based model architecture for '{model_name_path}'")
         return ModelProfile(
-            name=model_name_path,
-            max_seq_length=512,
-            requires_prefix=True
+            name=model_name_path, max_seq_length=512, requires_prefix=True
         )
-    
+
     if "bge-m3" in normalized_name:
         logger.info(f"Detected BGE-M3 architecture for '{model_name_path}'")
         return ModelProfile(
-            name=model_name_path,
-            max_seq_length=8192,
-            requires_prefix=False
+            name=model_name_path, max_seq_length=8192, requires_prefix=False
         )
 
     # If the model is not recognized, raise an error to prevent incorrect operation
@@ -76,34 +76,39 @@ def detect_model_profile(model_name_path: str) -> ModelProfile:
     logger.error(error_msg)
     raise ValueError(error_msg)
 
+
 # --- Service Layer ---
+
 
 class EmbeddingEngine:
     """
     Manager class controlling the model lifecycle.
     Implements the Singleton pattern at the module level (via instance).
     """
+
     def __init__(self):
         self.model: Optional[SentenceTransformer] = None
         self.profile: Optional[ModelProfile] = None
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.model_name_env = os.getenv('MODEL_NAME', 'intfloat/multilingual-e5-large')
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model_name_env = os.getenv("MODEL_NAME", "intfloat/multilingual-e5-large")
 
     def load(self):
         """Loads the model, applying settings appropriate to the profile."""
         self._cleanup_memory()
-        
+
         try:
             # First determine the profile to ensure the model is supported
             self.profile = detect_model_profile(self.model_name_env)
-            
+
             local_path = f"./models/{self.model_name_env}"
-            load_source = local_path if os.path.exists(local_path) else self.model_name_env
-            
+            load_source = (
+                local_path if os.path.exists(local_path) else self.model_name_env
+            )
+
             logger.info(f"Loading model from {load_source} to {self.device}...")
-            
+
             self.model = SentenceTransformer(load_source, device=self.device)
-            
+
             # If loading from network, save locally to cache
             if load_source == self.model_name_env:
                 logger.info(f"Saving model to {local_path} for future use...")
@@ -111,7 +116,9 @@ class EmbeddingEngine:
 
             # Apply profile settings
             self.model.max_seq_length = self.profile.max_seq_length
-            logger.info(f"Model loaded. Max Sequence Length: {self.model.max_seq_length}, Prefix Required: {self.profile.requires_prefix}")
+            logger.info(
+                f"Model loaded. Max Sequence Length: {self.model.max_seq_length}, Prefix Required: {self.profile.requires_prefix}"
+            )
 
         except Exception as e:
             logger.critical(f"Failed to load model: {e}")
@@ -130,13 +137,15 @@ class EmbeddingEngine:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    def encode(self, texts: List[str], is_query: bool, batch_size: int = 64) -> List[List[float]]:
+    def encode(
+        self, texts: List[str], is_query: bool, batch_size: int = 64
+    ) -> List[List[float]]:
         if self.model is None or self.profile is None:
             raise RuntimeError("Model is not loaded")
 
         # Logic for adding prefixes is encapsulated here
         prefix = self.profile.query_prefix if is_query else self.profile.passage_prefix
-        
+
         # If prefix is empty (BGE-M3), just take the text, otherwise concatenate
         processed_texts = [f"{prefix}{t}" for t in texts]
 
@@ -145,19 +154,21 @@ class EmbeddingEngine:
             normalize_embeddings=True,
             convert_to_tensor=False,
             batch_size=batch_size,
-            show_progress_bar=False
+            show_progress_bar=False,
         )
-        
+
         if hasattr(embeddings, "tolist"):
             embeddings = embeddings.tolist()
-            
+
         return embeddings
+
 
 # Initialize Engine
 engine = EmbeddingEngine()
 app = FastAPI()
 
 # --- API Events ---
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -169,30 +180,36 @@ async def startup_event():
         # In real prod we could do os._exit(1), but here we leave it to see logs
         pass
 
+
 # --- DTOs ---
+
 
 class TextRequest(BaseModel):
     text: str
     is_query: bool = True
 
+
 class BatchTextRequest(BaseModel):
     items: List[str]
     is_query: bool = False
 
+
 class TrainRequest(BaseModel):
     text_content: str
-    model_name: str 
+    model_name: str
+
 
 # --- Endpoints ---
+
 
 @app.post("/vectorize")
 async def vectorize(req: TextRequest):
     if engine.model is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model is currently training or initializing."
+            detail="Model is currently training or initializing.",
         )
-    
+
     try:
         # For a single request, wrap in a list, then extract the first element
         vector = engine.encode([req.text], is_query=req.is_query, batch_size=1)[0]
@@ -201,12 +218,13 @@ async def vectorize(req: TextRequest):
         logger.error(f"Vectorization error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/vectorize-batch")
 async def vectorize_batch(req: BatchTextRequest):
     if engine.model is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model is currently training or initializing."
+            detail="Model is currently training or initializing.",
         )
 
     try:
@@ -219,9 +237,11 @@ async def vectorize_batch(req: BatchTextRequest):
         logger.error(f"Batch vectorization error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # --- Training Logic ---
 
 jobs: Dict[str, Dict[str, Any]] = {}
+
 
 class JobProgressCallback(TrainerCallback):
     def __init__(self, job_id):
@@ -232,6 +252,7 @@ class JobProgressCallback(TrainerCallback):
             progress = int((state.global_step / state.max_steps) * 100)
             jobs[self.job_id]["progress"] = progress
             jobs[self.job_id]["steps"] = state.global_step
+
 
 def train_worker(job_id: str, req: TrainRequest):
     """
@@ -249,7 +270,7 @@ def train_worker(job_id: str, req: TrainRequest):
         # Parse data
         raw_lines = req.text_content.splitlines()
         train_examples = []
-        
+
         # IMPORTANT: When training, we must also consider whether prefixes are needed.
         # Usually E5 is fine-tuned with prefixes, while BGE is not.
         # For simplicity here, we assume the user provides "clean" text,
@@ -257,17 +278,18 @@ def train_worker(job_id: str, req: TrainRequest):
         # BUT: since the model is unloaded, profile might be unavailable or we are training a new model.
         # Here we follow the old logic: accept data as is, but form InputExample
         # with explicit prefix addition only if we are sure about the architecture.
-        
+
         # For reliability within this task, training is better conducted with the same rule:
         # Determine the base architecture.
-        base_profile = detect_model_profile(engine.model_name_env) 
-        
+        base_profile = detect_model_profile(engine.model_name_env)
+
         q_prefix = base_profile.query_prefix
         p_prefix = base_profile.passage_prefix
 
         for line in raw_lines:
             line = line.strip()
-            if not line: continue
+            if not line:
+                continue
             parts = line.split("\t")
             if len(parts) == 2:
                 # Add prefixes to training data ONLY if the model requires it
@@ -277,23 +299,27 @@ def train_worker(job_id: str, req: TrainRequest):
 
         if not train_examples:
             raise ValueError("No valid pairs found")
-        
-        logger.info(f"[{job_id}] Data prepared: {len(train_examples)} pairs. Prefixes used: {base_profile.requires_prefix}")
 
-        train_dataset = datasets.Dataset.from_dict({
-            "sentence_0": [e.texts[0] for e in train_examples],
-            "sentence_1": [e.texts[1] for e in train_examples],
-        })
+        logger.info(
+            f"[{job_id}] Data prepared: {len(train_examples)} pairs. Prefixes used: {base_profile.requires_prefix}"
+        )
+
+        train_dataset = datasets.Dataset.from_dict(
+            {
+                "sentence_0": [e.texts[0] for e in train_examples],
+                "sentence_1": [e.texts[1] for e in train_examples],
+            }
+        )
 
         # Load model for training
         load_path = f"./models/{engine.model_name_env}"
         if not os.path.exists(load_path):
             load_path = engine.model_name_env
-            
+
         logger.info(f"[{job_id}] Loading base model from {load_path}...")
         train_model = SentenceTransformer(load_path, device=engine.device)
-        train_model.max_seq_length = base_profile.max_seq_length # Use correct length
-        
+        train_model.max_seq_length = base_profile.max_seq_length  # Use correct length
+
         # Config
         output_dir = f"./models/{req.model_name}-tmp"
         args = SentenceTransformerTrainingArguments(
@@ -309,7 +335,7 @@ def train_worker(job_id: str, req: TrainRequest):
             logging_steps=10,
             save_strategy="no",
             report_to="none",
-            optim="adafactor"
+            optim="adafactor",
         )
 
         loss = losses.MultipleNegativesRankingLoss(train_model)
@@ -319,20 +345,21 @@ def train_worker(job_id: str, req: TrainRequest):
             args=args,
             train_dataset={"default": train_dataset},
             loss={"default": loss},
-            callbacks=[JobProgressCallback(job_id)]
+            callbacks=[JobProgressCallback(job_id)],
         )
 
         trainer.train()
 
         save_path = f"./models/{req.model_name}"
-        if not os.path.exists("./models"): os.makedirs("./models")
-        
+        if not os.path.exists("./models"):
+            os.makedirs("./models")
+
         train_model.save(save_path)
         logger.info(f"[{job_id}] Training finished. Saved to {save_path}")
 
         del train_model
         engine._cleanup_memory()
-        
+
         jobs[job_id]["status"] = "completed"
         jobs[job_id]["progress"] = 100
 
@@ -340,13 +367,14 @@ def train_worker(job_id: str, req: TrainRequest):
         logger.error(f"[{job_id}] Training failed: {e}")
         jobs[job_id]["status"] = "failed"
         jobs[job_id]["error"] = str(e)
-    
+
     finally:
         logger.info(f"[{job_id}] Reloading serving model...")
         try:
             engine.load()
         except Exception:
             pass
+
 
 @app.post("/fine-tune")
 async def fine_tune(req: TrainRequest, background_tasks: BackgroundTasks):
@@ -358,13 +386,10 @@ async def fine_tune(req: TrainRequest, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail=str(e))
 
     job_id = str(uuid.uuid4())
-    jobs[job_id] = {
-        "status": "pending",
-        "progress": 0,
-        "message": "Queued"
-    }
+    jobs[job_id] = {"status": "pending", "progress": 0, "message": "Queued"}
     background_tasks.add_task(train_worker, job_id, req)
     return {"job_id": job_id, "status": "pending"}
+
 
 @app.get("/train-status/{job_id}")
 async def get_train_status(job_id: str):
