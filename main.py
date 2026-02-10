@@ -307,10 +307,12 @@ def train_worker(job_id: str, req: TrainRequest):
             f"Prefixes used: {base_profile.requires_prefix}"
         )
 
+        # Prepare columns for dataset, ensuring 'texts' is not None
+        params_list = [e.texts for e in train_examples if e.texts is not None]
         train_dataset = datasets.Dataset.from_dict(
             {
-                "sentence_0": [e.texts[0] for e in train_examples],
-                "sentence_1": [e.texts[1] for e in train_examples],
+                "sentence_0": [p[0] for p in params_list],
+                "sentence_1": [p[1] for p in params_list],
             }
         )
 
