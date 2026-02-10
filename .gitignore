@@ -4,3 +4,15 @@ __pycache__/
 models/
 venv/
 .env
+
+# Testing and Coverage
+.coverage
+coverage.xml
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/

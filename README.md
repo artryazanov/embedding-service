@@ -3,6 +3,7 @@
 This is a FastAPI-based service for generating text embeddings, supporting multiple architectures like `intfloat/multilingual-e5-large` and `BAAI/bge-m3`. It automatically configures prefixes and sequence lengths based on the selected model. It supports both single text and batch processing.
 
 [![Tests](https://github.com/artryazanov/embedding-service/actions/workflows/tests.yml/badge.svg)](https://github.com/artryazanov/embedding-service/actions/workflows/tests.yml)
+[![codecov](https://codecov.io/gh/artryazanov/embedding-service/graph/badge.svg)](https://codecov.io/gh/artryazanov/embedding-service)
 [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](http://unlicense.org/)
 ![Python Versions](https://img.shields.io/badge/python-3.12-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)
