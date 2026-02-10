@@ -3,10 +3,11 @@ import logging
 import os
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import datasets
 import torch
+import torch.nn as nn
 from fastapi import BackgroundTasks, FastAPI, HTTPException, status
 from pydantic import BaseModel
 from sentence_transformers import (
@@ -161,7 +162,7 @@ class EmbeddingEngine:
         if hasattr(embeddings, "tolist"):
             embeddings = embeddings.tolist()
 
-        return embeddings
+        return cast(List[List[float]], embeddings)
 
 
 # Initialize Engine
@@ -346,7 +347,7 @@ def train_worker(job_id: str, req: TrainRequest):
             model=train_model,
             args=args,
             train_dataset={"default": train_dataset},
-            loss={"default": loss},
+            loss={"default": cast(nn.Module, loss)},
             callbacks=[JobProgressCallback(job_id)],
         )
 
