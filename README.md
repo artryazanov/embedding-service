@@ -4,7 +4,7 @@ This is a FastAPI-based service for generating text embeddings using the `intflo
 
 [![Tests](https://github.com/artryazanov/embedding-service/actions/workflows/tests.yml/badge.svg)](https://github.com/artryazanov/embedding-service/actions/workflows/tests.yml)
 [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](http://unlicense.org/)
-![Python Versions](https://img.shields.io/badge/python-3.10%20%7C%203.12-blue)
+![Python Versions](https://img.shields.io/badge/python-3.12-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)
 ![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=flat&logo=docker&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=flat&logo=PyTorch&logoColor=white)
