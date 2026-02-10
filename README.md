@@ -1,6 +1,6 @@
 # Embedding Service
 
-This is a FastAPI-based service for generating text embeddings using the `intfloat/multilingual-e5-large` model. It supports both single text and batch processing.
+This is a FastAPI-based service for generating text embeddings, supporting multiple architectures like `intfloat/multilingual-e5-large` and `BAAI/bge-m3`. It automatically configures prefixes and sequence lengths based on the selected model. It supports both single text and batch processing.
 
 [![Tests](https://github.com/artryazanov/embedding-service/actions/workflows/tests.yml/badge.svg)](https://github.com/artryazanov/embedding-service/actions/workflows/tests.yml)
 [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](http://unlicense.org/)
@@ -11,7 +11,8 @@ This is a FastAPI-based service for generating text embeddings using the `intflo
 ![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-yellow)
 
 ## 🔥 Features
-- **Multilingual Support**: Uses `intfloat/multilingual-e5-large`.
+- **Multi-Architecture Support**: Automatically detects and configures for `E5` (prefixes, 512 seq) and `BGE-M3` (no prefixes, 8192 seq) models.
+- **Multilingual Support**: Default: `intfloat/multilingual-e5-large`.
 - **FastAPI**: High performance, easy to use.
 - **GPU Support**: Automatically detects CUDA if available (requires proper PyTorch build).
 - **Batch Processing**: Efficiently vectorize multiple texts at once.
@@ -111,6 +112,18 @@ docker run -d -p 8000:8000 --gpus all \
 The service will check if `/app/models/my-custom-model` exists.
 - If **Yes**: It loads the model locally.
 - If **No**: It attempts to download `my-custom-model` from HuggingFace.
+
+### 4️⃣ Supported Models & Auto-Configuration
+
+The service uses a **Smart Strategy Pattern** to automatically configure itself based on the model name in `MODEL_NAME`:
+
+| Model Family | Detected By | Max Sequence Length | Prefixes (query: / passage:) |
+| :--- | :--- | :--- | :--- |
+| **E5** | "e5" in name | 512 | ✅ Yes |
+| **BGE-M3** | "bge-m3" in name | 8192 | ❌ No |
+| **Other** | - | - | ❌ Error (Unsupported) |
+
+> **Note:** If you use a custom fine-tuned model, ensure its name contains "e5" or "bge-m3" so the service knows how to handle it.
 
 ## 📚 API Usage
 

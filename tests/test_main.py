@@ -1,8 +1,8 @@
 
 import pytest
-from unittest.mock import patch
-from main import app, load_serving_model, unload_model
-
+import pytest
+from unittest.mock import patch, MagicMock
+from main import app, engine
 def test_vectorize_success(client, mock_sentence_transformer):
     # Ensure model is "loaded" (mocked)
     # The client fixture should have triggered startup, but we can verify or force it
@@ -10,8 +10,8 @@ def test_vectorize_success(client, mock_sentence_transformer):
     # but currently it doesn't. Let's force load in the test or modify fixture.
     # Ideally, we rely on startup event. 
     
-    # We can also explicitly calling load_serving_model() to set the global
-    load_serving_model()
+    # We can also explicitly calling engine.load() to set the global
+    engine.load()
     
     response = client.post("/vectorize", json={"text": "hello world", "is_query": True})
     assert response.status_code == 200
@@ -23,14 +23,14 @@ def test_vectorize_success(client, mock_sentence_transformer):
 
 def test_vectorize_model_unloaded(client):
     # Determine state: unload model
-    unload_model()
+    engine.unload()
     
     response = client.post("/vectorize", json={"text": "hello world"})
     assert response.status_code == 503
-    assert response.json()["detail"] == "Model is currently training. Please try again later."
+    assert response.json()["detail"] == "Model is currently training or initializing."
 
 def test_vectorize_batch_success(client, mock_sentence_transformer):
-    load_serving_model()
+    engine.load()
     
     # Mock return value for batch (main.py:102 calls encode on list)
     # The mock in conftest sets return_value for single call. 
@@ -50,7 +50,7 @@ def test_vectorize_batch_success(client, mock_sentence_transformer):
     assert data["vectors"][0] == [0.1, 0.1]
 
 def test_fine_tune_start(client, mock_trainer, mock_sentence_transformer):
-    load_serving_model()
+    engine.load()
     
     # Mock BackgroundTasks so we don't actually run the worker immediately or verify it runs
     # But FastAPI TestClient runs background tasks synchronously by default.
