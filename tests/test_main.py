@@ -1,14 +1,12 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
-
-from main import app, engine
+from main import engine
 
 
 def test_vectorize_success(client, mock_sentence_transformer):
     # Ensure model is "loaded" (mocked)
     # The client fixture should have triggered startup, but we can verify or force it
-    # Because client fixture depends on mock_sentence_transformer (if we added it as arg),
+    # Because client fixture depends on mock_sentence_transformer,
     # but currently it doesn't. Let's force load in the test or modify fixture.
     # Ideally, we rely on startup event.
 
@@ -40,7 +38,7 @@ def test_vectorize_batch_success(client, mock_sentence_transformer):
     # The mock in conftest sets return_value for single call.
     # For batch, encode returns a list of embeddings (or ndarray).
     # Let's update the mock behavior for this test if needed,
-    # but the default mock returns [0.1, 0.2, 0.3] which might be treated as a single embedding?
+    # but the default mock returns [0.1, 0.2, 0.3].
     # SentenceTransformer.encode(list) returns a list of embeddings (numpy arrays).
 
     # We need to make sure our mock returns a list of lists for batch inputs
@@ -59,7 +57,7 @@ def test_vectorize_batch_success(client, mock_sentence_transformer):
 def test_fine_tune_start(client, mock_trainer, mock_sentence_transformer):
     engine.load()
 
-    # Mock BackgroundTasks so we don't actually run the worker immediately or verify it runs
+    # Mock BackgroundTasks so we don't executed worker immediately.
     # But FastAPI TestClient runs background tasks synchronously by default.
     # So train_worker will be called.
     # train_worker calls unload_model, then SentenceTransformerTrainer...
@@ -72,7 +70,7 @@ def test_fine_tune_start(client, mock_trainer, mock_sentence_transformer):
         "model_name": "test_model",
     }
 
-    # We need to ensure we don't actually delete models or modify files system significantly
+    # We need to ensure we don't delete models or modify files system significantly
     # train_worker does:
     # 1. unload_model()
     # 2. parses numbers

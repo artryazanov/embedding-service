@@ -1,6 +1,6 @@
 import pytest
 
-from main import ModelProfile, detect_model_profile
+from main import detect_model_profile
 
 
 def test_detect_e5_standard():

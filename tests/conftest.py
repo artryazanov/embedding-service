@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 # Add project root to sys.path to ensure we can import main
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main import app
+from main import app  # noqa: E402
 
 
 @pytest.fixture
@@ -19,7 +19,7 @@ def client():
 @pytest.fixture
 def mock_sentence_transformer():
     with patch("main.SentenceTransformer") as mock:
-        # Creating a mock instance that will be returned when SentenceTransformer() is called
+        # Creating a mock instance that will be returned when initialized
         mock_instance = MagicMock()
 
         # Setup default behaviors for the mock instance

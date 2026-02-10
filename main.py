@@ -117,7 +117,8 @@ class EmbeddingEngine:
             # Apply profile settings
             self.model.max_seq_length = self.profile.max_seq_length
             logger.info(
-                f"Model loaded. Max Sequence Length: {self.model.max_seq_length}, Prefix Required: {self.profile.requires_prefix}"
+                f"Model loaded. Max Seq Len: {self.model.max_seq_length}, "
+                f"Prefix: {self.profile.requires_prefix}"
             )
 
         except Exception as e:
@@ -275,11 +276,11 @@ def train_worker(job_id: str, req: TrainRequest):
         # Usually E5 is fine-tuned with prefixes, while BGE is not.
         # For simplicity here, we assume the user provides "clean" text,
         # and prefixes are added by the code below (if we were using engine.profile).
-        # BUT: since the model is unloaded, profile might be unavailable or we are training a new model.
+        # BUT: since the model is unloaded, profile might be unavailable.
         # Here we follow the old logic: accept data as is, but form InputExample
         # with explicit prefix addition only if we are sure about the architecture.
 
-        # For reliability within this task, training is better conducted with the same rule:
+        # For reliability, training is better conducted with the same rule:
         # Determine the base architecture.
         base_profile = detect_model_profile(engine.model_name_env)
 
@@ -301,7 +302,8 @@ def train_worker(job_id: str, req: TrainRequest):
             raise ValueError("No valid pairs found")
 
         logger.info(
-            f"[{job_id}] Data prepared: {len(train_examples)} pairs. Prefixes used: {base_profile.requires_prefix}"
+            f"[{job_id}] Data prepared: {len(train_examples)} pairs. "
+            f"Prefixes used: {base_profile.requires_prefix}"
         )
 
         train_dataset = datasets.Dataset.from_dict(
