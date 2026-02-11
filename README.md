@@ -14,6 +14,7 @@ This is a FastAPI-based service for generating text embeddings, supporting multi
 ## 🔥 Features
 - **Multi-Architecture Support**: Automatically detects and configures for `E5` (prefixes, 512 seq) and `BGE-M3` (no prefixes, 8192 seq) models.
 - **Multilingual Support**: Default: `intfloat/multilingual-e5-large`.
+- **Efficient Fine-Tuning**: Supports **LoRA** and **Q-LoRA** (4-bit quantization) for training large models with minimal memory.
 - **FastAPI**: High performance, easy to use.
 - **GPU Support**: Automatically detects CUDA if available (requires proper PyTorch build).
 - **Batch Processing**: Efficiently vectorize multiple texts at once.
@@ -212,6 +213,24 @@ Lines that do not match this format will be ignored.
 {
   "job_id": "uuid-string",
   "status": "pending"
+}
+```
+
+
+### Train/Fine-tune Model (LoRA / Q-LoRA)
+**Endpoint:** `POST /fine-tune-lora`
+
+Efficient fine-tuning using Low-Rank Adaptation (LoRA). Supports 4-bit quantization (Q-LoRA) to drastically reduce memory usage (e.g., training BGE-M3 on consumer GPUs).
+
+**Request:**
+```json
+{
+  "text_content": "Query\tPassage...",
+  "model_name": "my-lora-model",
+  "r": 16,            // Rank (default: 16)
+  "lora_alpha": 32,   // Alpha scaling (default: 32)
+  "lora_dropout": 0.05,
+  "use_qlora": true   // Set to true for 4-bit quantization (Linux/WSL only)
 }
 ```
 
