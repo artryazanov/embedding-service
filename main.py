@@ -152,7 +152,10 @@ class EmbeddingEngine:
             torch.cuda.empty_cache()
 
     def encode(
-        self, texts: List[str], is_query: bool, batch_size: int = 64
+        self,
+        texts: List[str],
+        is_query: bool,
+        batch_size: int = 64,
     ) -> List[List[float]]:
         if self.model is None or self.profile is None:
             raise RuntimeError("Model is not loaded")
@@ -510,7 +513,8 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
 
         # Wrap model in PEFT
         train_model._first_module().auto_model = get_peft_model(
-            transformer_module, peft_config
+            transformer_module,
+            peft_config,
         )
         train_model._first_module().auto_model.print_trainable_parameters()
 
