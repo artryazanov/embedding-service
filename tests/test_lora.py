@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock, patch
+
 import pytest
+
 from main import LoraTrainRequest, engine
 
 
@@ -51,7 +53,7 @@ def test_train_lora_worker_flow(mock_sentence_transformer):
     Test the flow of train_lora_worker with heavy mocking.
     We check if PEFT and Quantization configs are initialized correctly.
     """
-    from main import train_lora_worker, jobs
+    from main import jobs, train_lora_worker
 
     # Mock all the heavy imports and internal calls
     with (

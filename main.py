@@ -9,6 +9,13 @@ import datasets
 import torch
 import torch.nn as nn
 from fastapi import BackgroundTasks, FastAPI, HTTPException, status
+from peft import (
+    LoraConfig,
+    PeftModel,
+    TaskType,
+    get_peft_model,
+    prepare_model_for_kbit_training,
+)
 from pydantic import BaseModel
 from sentence_transformers import (
     InputExample,
@@ -18,13 +25,7 @@ from sentence_transformers import (
     losses,
 )
 from transformers import BitsAndBytesConfig, TrainerCallback
-from peft import (
-    LoraConfig,
-    get_peft_model,
-    TaskType,
-    prepare_model_for_kbit_training,
-    PeftModel,
-)
+
 
 # --- Configuration & Logging ---
 logging.basicConfig(
