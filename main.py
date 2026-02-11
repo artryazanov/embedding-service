@@ -18,7 +18,13 @@ from sentence_transformers import (
     losses,
 )
 from transformers import BitsAndBytesConfig, TrainerCallback
-from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training, PeftModel
+from peft import (
+    LoraConfig,
+    get_peft_model,
+    TaskType,
+    prepare_model_for_kbit_training,
+    PeftModel,
+)
 
 # --- Configuration & Logging ---
 logging.basicConfig(
@@ -206,10 +212,10 @@ class LoraTrainRequest(BaseModel):
     text_content: str
     model_name: str
     # LoRA parameters
-    r: int = 16            # Adapter rank
-    lora_alpha: int = 32   # Scaling
+    r: int = 16  # Adapter rank
+    lora_alpha: int = 32  # Scaling
     lora_dropout: float = 0.05
-    use_qlora: bool = True # Use 4-bit quantization
+    use_qlora: bool = True  # Use 4-bit quantization
 
 
 # --- Endpoints ---
@@ -335,13 +341,17 @@ def train_worker(job_id: str, req: TrainRequest):
 
         logger.info(f"[{job_id}] Loading base model from {load_path}...")
         train_model = SentenceTransformer(load_path, device=engine.device)
-        
+
         # FIX: Force limit sequence length for training to avoid OOM.
         # 8192 is too much for training, 512-1024 is usually sufficient.
-        TRAIN_SEQ_LENGTH_LIMIT = 512 
-        train_model.max_seq_length = min(base_profile.max_seq_length, TRAIN_SEQ_LENGTH_LIMIT)
-        
-        logger.info(f"[{job_id}] Training max_seq_length set to: {train_model.max_seq_length}")
+        TRAIN_SEQ_LENGTH_LIMIT = 512
+        train_model.max_seq_length = min(
+            base_profile.max_seq_length, TRAIN_SEQ_LENGTH_LIMIT
+        )
+
+        logger.info(
+            f"[{job_id}] Training max_seq_length set to: {train_model.max_seq_length}"
+        )
 
         # Config
         output_dir = f"./models/{req.model_name}-tmp"
@@ -412,7 +422,7 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
         # --- (Start data prep block) ---
         raw_lines = req.text_content.splitlines()
         train_examples = []
-        
+
         # Determine base model profile for prefixes
         base_profile = detect_model_profile(engine.model_name_env)
         q_prefix = base_profile.query_prefix
@@ -420,7 +430,8 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
 
         for line in raw_lines:
             line = line.strip()
-            if not line: continue
+            if not line:
+                continue
             parts = line.split("\t")
             if len(parts) == 2:
                 q = f"{q_prefix}{parts[0].strip()}"
@@ -429,12 +440,14 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
 
         if not train_examples:
             raise ValueError("No valid pairs found")
-            
+
         params_list = [e.texts for e in train_examples if e.texts is not None]
-        train_dataset = datasets.Dataset.from_dict({
-            "sentence_0": [p[0] for p in params_list],
-            "sentence_1": [p[1] for p in params_list],
-        })
+        train_dataset = datasets.Dataset.from_dict(
+            {
+                "sentence_0": [p[0] for p in params_list],
+                "sentence_1": [p[1] for p in params_list],
+            }
+        )
         # --- (End data prep block) ---
 
         # 3. Configure Q-LoRA (4-bit) or standard LoRA
@@ -449,21 +462,23 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
                 load_in_4bit=True,
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16
+                bnb_4bit_compute_dtype=torch.float16,
             )
             model_kwargs["quantization_config"] = bnb_config
             model_kwargs["torch_dtype"] = torch.float16
 
         logger.info(f"[{job_id}] Loading base model for LoRA...")
-        
+
         # Load model with quantization kwargs
         # FIX: Force device="cuda:0" to avoid ambiguity and help prevent DataParallel usage
         train_device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        train_model = SentenceTransformer(load_path, device=train_device, model_kwargs=model_kwargs)
-        
+        train_model = SentenceTransformer(
+            load_path, device=train_device, model_kwargs=model_kwargs
+        )
+
         # IMPORTANT: With Q-LoRA and LoRA, context length can be larger,
         # but for now we take a safe 1024, as 4080 handles this easily with LoRA.
-        train_model.max_seq_length = 1024 
+        train_model.max_seq_length = 1024
 
         # 4. Apply LoRA to the internal transformer model
         # SentenceTransformer wraps HuggingFace model in modules.
@@ -482,11 +497,18 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
             lora_dropout=req.lora_dropout,
             bias="none",
             task_type=TaskType.FEATURE_EXTRACTION,
-            target_modules=["query", "key", "value", "dense"] # Extended set for better quality
+            target_modules=[
+                "query",
+                "key",
+                "value",
+                "dense",
+            ],  # Extended set for better quality
         )
 
         # Wrap model in PEFT
-        train_model._first_module().auto_model = get_peft_model(transformer_module, peft_config)
+        train_model._first_module().auto_model = get_peft_model(
+            transformer_module, peft_config
+        )
         train_model._first_module().auto_model.print_trainable_parameters()
 
         # 5. Trainer parameters
@@ -494,21 +516,25 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
         args = SentenceTransformerTrainingArguments(
             output_dir=output_dir,
             num_train_epochs=1,
-            per_device_train_batch_size=4, # With LoRA we can increase batch size!
+            per_device_train_batch_size=4,  # With LoRA we can increase batch size!
             gradient_accumulation_steps=4,
-            learning_rate=2e-4, # LoRA needs higher LR (usually 1e-4 ... 2e-4)
+            learning_rate=2e-4,  # LoRA needs higher LR (usually 1e-4 ... 2e-4)
             warmup_ratio=0.05,
             fp16=True,
             logging_steps=10,
             save_strategy="no",
             report_to="none",
-            optim="paged_adamw_8bit" if req.use_qlora else "adamw_torch" # Optimizer for memory savings
+            optim=(
+                "paged_adamw_8bit" if req.use_qlora else "adamw_torch"
+            ),  # Optimizer for memory savings
         )
 
         # FIX: Force single-GPU (n_gpu=1) to prevent Trainer from using DataParallel.
         # DataParallel is incompatible with bitsandbytes 4-bit quantization.
         if torch.cuda.device_count() > 1:
-            logger.info(f"[{job_id}] Multiple GPUs detected. Forcing single-GPU (n_gpu=1) for LoRA compatibility.")
+            logger.info(
+                f"[{job_id}] Multiple GPUs detected. Forcing single-GPU (n_gpu=1) for LoRA compatibility."
+            )
             args._n_gpu = 1
 
         loss = losses.MultipleNegativesRankingLoss(train_model)
@@ -528,10 +554,10 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
         save_path = f"./models/{req.model_name}"
         if not os.path.exists(save_path):
             os.makedirs(save_path)
-        
+
         logger.info(f"[{job_id}] Saving LoRA adapter to {save_path}")
         train_model.save(save_path)
-        
+
         # Cleanup
         del train_model
         del trainer
@@ -550,6 +576,7 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
             engine.load()
         except Exception:
             pass
+
 
 @app.post("/fine-tune")
 async def fine_tune(req: TrainRequest, background_tasks: BackgroundTasks):
@@ -580,11 +607,10 @@ async def fine_tune_lora(req: LoraTrainRequest, background_tasks: BackgroundTask
 
     job_id = str(uuid.uuid4())
     jobs[job_id] = {"status": "pending", "progress": 0, "message": "Queued (LoRA)"}
-    
-    background_tasks.add_task(train_lora_worker, job_id, req)
-    
-    return {"job_id": job_id, "status": "pending", "type": "lora"}
 
+    background_tasks.add_task(train_lora_worker, job_id, req)
+
+    return {"job_id": job_id, "status": "pending", "type": "lora"}
 
 
 @app.get("/train-status/{job_id}")
