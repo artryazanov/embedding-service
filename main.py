@@ -340,18 +340,10 @@ def train_worker(job_id: str, req: TrainRequest):
             load_path = engine.model_name_env
 
         logger.info(f"[{job_id}] Loading base model from {load_path}...")
-        train_model = SentenceTransformer(load_path, device=engine.device)
-
-        # FIX: Force limit sequence length for training to avoid OOM.
-        # 8192 is too much for training, 512-1024 is usually sufficient.
-        TRAIN_SEQ_LENGTH_LIMIT = 512
-        train_model.max_seq_length = min(
-            base_profile.max_seq_length, TRAIN_SEQ_LENGTH_LIMIT
-        )
-
-        logger.info(
-            f"[{job_id}] Training max_seq_length set to: {train_model.max_seq_length}"
-        )
+        # FIX: Force device="cuda:0" to avoid ambiguity and help prevent DataParallel usage
+        train_device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        train_model = SentenceTransformer(load_path, device=train_device)
+        train_model.max_seq_length = base_profile.max_seq_length  # Use correct length
 
         # Config
         output_dir = f"./models/{req.model_name}-tmp"
@@ -370,6 +362,13 @@ def train_worker(job_id: str, req: TrainRequest):
             report_to="none",
             optim="adafactor",
         )
+
+        # FIX: Force single-GPU (n_gpu=1) to prevent Trainer from using DataParallel.
+        if torch.cuda.device_count() > 1:
+            logger.info(
+                f"[{job_id}] Multiple GPUs detected. Forcing single-GPU (n_gpu=1)."
+            )
+            args._n_gpu = 1
 
         loss = losses.MultipleNegativesRankingLoss(train_model)
 
@@ -475,10 +474,7 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
         train_model = SentenceTransformer(
             load_path, device=train_device, model_kwargs=model_kwargs
         )
-
-        # IMPORTANT: With Q-LoRA and LoRA, context length can be larger,
-        # but for now we take a safe 1024, as 4080 handles this easily with LoRA.
-        train_model.max_seq_length = 1024
+        train_model.max_seq_length = base_profile.max_seq_length  # Use correct length
 
         # 4. Apply LoRA to the internal transformer model
         # SentenceTransformer wraps HuggingFace model in modules.
