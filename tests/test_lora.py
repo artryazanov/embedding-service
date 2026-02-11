@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from main import LoraTrainRequest, engine
+from main import LoraTrainRequest
 
 
 def test_fine_tune_lora_endpoint(client):
@@ -59,12 +59,12 @@ def test_train_lora_worker_flow(mock_sentence_transformer):
     with (
         patch("main.BitsAndBytesConfig") as MockBnBConfig,
         patch("main.LoraConfig") as MockLoraConfig,
-        patch("main.get_peft_model") as mock_get_peft,
+        patch("main.get_peft_model") as _mock_get_peft,
         patch("main.prepare_model_for_kbit_training") as mock_prep_kbit,
-        patch("main.SentenceTransformerTrainingArguments") as MockArgs,
+        patch("main.SentenceTransformerTrainingArguments") as _MockArgs,
         patch("main.SentenceTransformerTrainer") as MockTrainer,
         patch("main.detect_model_profile") as mock_detect,
-        patch("main.datasets.Dataset.from_dict") as mock_dataset,
+        patch("main.datasets.Dataset.from_dict") as _mock_dataset,
     ):
 
         # Setup mocks

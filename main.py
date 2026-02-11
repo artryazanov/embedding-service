@@ -11,7 +11,6 @@ import torch.nn as nn
 from fastapi import BackgroundTasks, FastAPI, HTTPException, status
 from peft import (
     LoraConfig,
-    PeftModel,
     TaskType,
     get_peft_model,
     prepare_model_for_kbit_training,
@@ -347,7 +346,8 @@ def train_worker(job_id: str, req: TrainRequest):
             load_path = engine.model_name_env
 
         logger.info(f"[{job_id}] Loading base model from {load_path}...")
-        # FIX: Force device="cuda:0" to avoid ambiguity and help prevent DataParallel usage
+        # FIX: Force device="cuda:0" to avoid ambiguity.
+        # This helps prevent DataParallel usage.
         train_device = "cuda:0" if torch.cuda.is_available() else "cpu"
         train_model = SentenceTransformer(load_path, device=train_device)
         train_model.max_seq_length = base_profile.max_seq_length  # Use correct length
@@ -476,7 +476,8 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
         logger.info(f"[{job_id}] Loading base model for LoRA...")
 
         # Load model with quantization kwargs
-        # FIX: Force device="cuda:0" to avoid ambiguity and help prevent DataParallel usage
+        # FIX: Force device="cuda:0" to avoid ambiguity.
+        # This helps prevent DataParallel usage.
         train_device = "cuda:0" if torch.cuda.is_available() else "cpu"
         train_model = SentenceTransformer(
             load_path,
@@ -495,7 +496,8 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
             transformer_module = prepare_model_for_kbit_training(transformer_module)
 
         # LoRA Config
-        # target_modules depends on architecture, but for BERT/RoBERTa (E5/BGE) it's query/key/value
+        # target_modules depends on architecture,
+        # but for BERT/RoBERTa (E5/BGE) it's query/key/value
         peft_config = LoraConfig(
             r=req.r,
             lora_alpha=req.lora_alpha,
