@@ -491,7 +491,9 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
         # Usually the first module is Transformer.
         from transformers import PreTrainedModel
 
-        transformer_module = cast(PreTrainedModel, train_model._first_module().auto_model)
+        transformer_module = cast(
+            PreTrainedModel, train_model._first_module().auto_model
+        )
 
         # Prepare for k-bit training (if QLoRA)
         if req.use_qlora:
