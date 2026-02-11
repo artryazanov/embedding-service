@@ -68,13 +68,17 @@ def detect_model_profile(model_name_path: str) -> ModelProfile:
     if "e5" in normalized_name:
         logger.info(f"Detected E5-based model architecture for '{model_name_path}'")
         return ModelProfile(
-            name=model_name_path, max_seq_length=512, requires_prefix=True
+            name=model_name_path,
+            max_seq_length=512,
+            requires_prefix=True,
         )
 
     if "bge-m3" in normalized_name:
         logger.info(f"Detected BGE-M3 architecture for '{model_name_path}'")
         return ModelProfile(
-            name=model_name_path, max_seq_length=8192, requires_prefix=False
+            name=model_name_path,
+            max_seq_length=8192,
+            requires_prefix=False,
         )
 
     # If the model is not recognized, raise an error to prevent incorrect operation
@@ -473,7 +477,9 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
         # FIX: Force device="cuda:0" to avoid ambiguity and help prevent DataParallel usage
         train_device = "cuda:0" if torch.cuda.is_available() else "cpu"
         train_model = SentenceTransformer(
-            load_path, device=train_device, model_kwargs=model_kwargs
+            load_path,
+            device=train_device,
+            model_kwargs=model_kwargs,
         )
         train_model.max_seq_length = base_profile.max_seq_length  # Use correct length
 
@@ -521,9 +527,8 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
             logging_steps=10,
             save_strategy="no",
             report_to="none",
-            optim=(
-                "paged_adamw_8bit" if req.use_qlora else "adamw_torch"
-            ),  # Optimizer for memory savings
+            # Optimizer for memory savings
+            optim="paged_adamw_8bit" if req.use_qlora else "adamw_torch",
         )
 
         # FIX: Force single-GPU (n_gpu=1) to prevent Trainer from using DataParallel.
