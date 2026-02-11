@@ -517,11 +517,12 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
         )
 
         # Wrap model in PEFT
-        train_model._first_module().auto_model = get_peft_model(
+        peft_model = get_peft_model(
             transformer_module,
             peft_config,
         )
-        train_model._first_module().auto_model.print_trainable_parameters()
+        train_model._first_module().auto_model = peft_model
+        peft_model.print_trainable_parameters()
 
         # 5. Trainer parameters
         output_dir = f"./models/{req.model_name}-tmp"
