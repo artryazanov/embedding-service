@@ -461,7 +461,7 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
         if not os.path.exists(load_path):
             load_path = engine.model_name_env
 
-        model_kwargs = {}
+        model_kwargs: Dict[str, Any] = {}
         if req.use_qlora:
             logger.info(f"[{job_id}] Using Q-LoRA (4-bit quantization)")
             bnb_config = BitsAndBytesConfig(
@@ -489,7 +489,9 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
         # 4. Apply LoRA to the internal transformer model
         # SentenceTransformer wraps HuggingFace model in modules.
         # Usually the first module is Transformer.
-        transformer_module = train_model._first_module().auto_model
+        from transformers import PreTrainedModel
+
+        transformer_module = cast(PreTrainedModel, train_model._first_module().auto_model)
 
         # Prepare for k-bit training (if QLoRA)
         if req.use_qlora:
