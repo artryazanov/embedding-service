@@ -539,7 +539,8 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
         # DataParallel is incompatible with bitsandbytes 4-bit quantization.
         if torch.cuda.device_count() > 1:
             logger.info(
-                f"[{job_id}] Multiple GPUs detected. Forcing single-GPU (n_gpu=1) for LoRA compatibility."
+                f"[{job_id}] Multiple GPUs detected. "
+                "Forcing single-GPU (n_gpu=1) for LoRA compatibility."
             )
             args._n_gpu = 1
 
