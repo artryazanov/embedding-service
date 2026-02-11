@@ -59,12 +59,12 @@ def test_train_lora_worker_flow(mock_sentence_transformer):
     with (
         patch("main.BitsAndBytesConfig") as MockBnBConfig,
         patch("main.LoraConfig") as MockLoraConfig,
-        patch("main.get_peft_model") as _mock_get_peft,
+        patch("main.get_peft_model"),
         patch("main.prepare_model_for_kbit_training") as mock_prep_kbit,
-        patch("main.SentenceTransformerTrainingArguments") as _MockArgs,
+        patch("main.SentenceTransformerTrainingArguments"),
         patch("main.SentenceTransformerTrainer") as MockTrainer,
         patch("main.detect_model_profile") as mock_detect,
-        patch("main.datasets.Dataset.from_dict") as _mock_dataset,
+        patch("main.datasets.Dataset.from_dict"),
     ):
 
         # Setup mocks
