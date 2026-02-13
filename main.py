@@ -73,7 +73,8 @@ def detect_model_profile(model_name: str) -> ModelProfile:
     if "e5" in lower_name:
         return E5ModelProfile(model_name, max_seq_length=512)
     elif "bge-m3" in lower_name:
-        # BGE-M3 supports up to 8192, but we default to 8192 or less depending on resources
+        # BGE-M3 supports up to 8192,
+        # but we default to 8192 or less depending on resources
         return GenericModelProfile(model_name, max_seq_length=8192)
     else:
         return GenericModelProfile(model_name)
@@ -191,8 +192,8 @@ class EmbeddingEngine:
                     device=self.device,
                 )
 
-                # To support legacy methods and fine-tuning (which requires SentenceTransformer),
-                # we also load SentenceTransformer as self.model.
+                # To support legacy methods and fine-tuning (which requires
+                # SentenceTransformer), we also load SentenceTransformer as self.model.
                 # NOTE: This doubles memory usage if loaded simultaneously.
                 # Ideally, one should migrate completely, but for backward compatibility
                 # we keep both for now if needed.
@@ -705,8 +706,8 @@ async def vectorize_hybrid(req: HybridTextRequest):
         result_list = engine.encode_hybrid(
             [req.text], return_colbert=req.return_colbert, batch_size=1
         )
-        # result_list is a list of dicts, but we need to convert it to HybridVector model
-        # However, pydantic should handle dict to model conversion
+        # result_list is a list of dicts, but we need to convert it to HybridVector
+        # model. However, pydantic should handle dict to model conversion
         return {"hybrid_vector": result_list[0]}
     except Exception as e:
         logger.error(f"Hybrid vectorization error: {e}")

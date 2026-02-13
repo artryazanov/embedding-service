@@ -30,7 +30,8 @@ def test_detect_bge_m3_custom():
 
 
 def test_detect_unsupported_model():
-    # Unsupported models now default to GenericModelProfile instead of raising ValueError
+    # Unsupported models now default to GenericModelProfile
+    # instead of raising ValueError
     profile = detect_model_profile("bert-base-uncased")
     assert profile.max_seq_length == 512  # Default for generic
     assert profile.format_text("hello") == "hello"
