@@ -236,6 +236,11 @@ class EmbeddingEngine:
             raise RuntimeError("Model is not loaded")
 
         # Apply formatting (prefixes) if needed
+        # self.profile is guaranteed to be set if model is loaded (by load())
+        # but mypy doesn't know.
+        if self.profile is None:
+            raise RuntimeError("Model profile is not initialized")
+
         formatted_texts = [self.profile.format_text(t, is_query) for t in texts]
 
         embeddings = self.model.encode(
@@ -258,7 +263,8 @@ class EmbeddingEngine:
         output = self.bge_model.encode(
             texts,
             batch_size=batch_size,
-            max_length=self.profile.max_seq_length,
+            # self.profile is guaranteed to be set if bge_model is not None
+            max_length=self.profile.max_seq_length if self.profile else 8192,
             return_dense=True,
             return_sparse=True,
             return_colbert_vecs=return_colbert,
@@ -400,8 +406,19 @@ def train_worker(job_id: str, req: TrainRequest):
         # Determine the base architecture.
         base_profile = detect_model_profile(engine.model_name_env)
 
-        q_prefix = base_profile.query_prefix
-        p_prefix = base_profile.passage_prefix
+        # q_prefix = base_profile.query_prefix
+        # p_prefix = base_profile.passage_prefix
+        # NOTE: ModelProfile no longer exposes raw prefixes, but format_text method.
+        # However, for training pair generation, we need raw prefixes.
+        # We can simulate this by formatting an empty string or standard text.
+        # Or better: check if it's E5 profile, but that breaks polymorphism.
+        # Let's derive prefixes by formatting an empty string? No, "query: ".
+        q_example = base_profile.format_text("", is_query=True)
+        p_example = base_profile.format_text("", is_query=False)
+
+        # Heuristic: if format_text adds something, that's the prefix.
+        # But E5 adds "query: ", while others might add nothing.
+        # If we use format_text inside the loop, we are safe.
 
         for line in raw_lines:
             line = line.strip()
@@ -410,17 +427,15 @@ def train_worker(job_id: str, req: TrainRequest):
             parts = line.split("\t")
             if len(parts) == 2:
                 # Add prefixes to training data ONLY if the model requires it
-                q = f"{q_prefix}{parts[0].strip()}"
-                p = f"{p_prefix}{parts[1].strip()}"
+                # Use format_text directly
+                q = base_profile.format_text(parts[0].strip(), is_query=True)
+                p = base_profile.format_text(parts[1].strip(), is_query=False)
                 train_examples.append(InputExample(texts=[q, p]))
 
         if not train_examples:
             raise ValueError("No valid pairs found")
 
-        logger.info(
-            f"[{job_id}] Data prepared: {len(train_examples)} pairs. "
-            f"Prefixes used: {base_profile.requires_prefix}"
-        )
+        logger.info(f"[{job_id}] Data prepared: {len(train_examples)} pairs.")
 
         # Prepare columns for dataset, ensuring 'texts' is not None
         params_list = [e.texts for e in train_examples if e.texts is not None]
@@ -522,8 +537,9 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
 
         # Determine base model profile for prefixes
         base_profile = detect_model_profile(engine.model_name_env)
-        q_prefix = base_profile.query_prefix
-        p_prefix = base_profile.passage_prefix
+        # Use format_text logic inside loop instead of raw prefixes
+        # q_prefix = base_profile.query_prefix
+        # p_prefix = base_profile.passage_prefix
 
         for line in raw_lines:
             line = line.strip()
@@ -531,8 +547,8 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
                 continue
             parts = line.split("\t")
             if len(parts) == 2:
-                q = f"{q_prefix}{parts[0].strip()}"
-                p = f"{p_prefix}{parts[1].strip()}"
+                q = base_profile.format_text(parts[0].strip(), is_query=True)
+                p = base_profile.format_text(parts[1].strip(), is_query=False)
                 train_examples.append(InputExample(texts=[q, p]))
 
         if not train_examples:
