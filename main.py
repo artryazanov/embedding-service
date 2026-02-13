@@ -27,9 +27,11 @@ from sentence_transformers import (
     losses,
 )
 from transformers import BitsAndBytesConfig, TrainerCallback
+
 # Try to import FlagEmbedding for BGE-M3 hybrid features
 try:
     from FlagEmbedding import BGEM3FlagModel
+
     FLAG_EMBEDDING_AVAILABLE = True
 except ImportError:
     FLAG_EMBEDDING_AVAILABLE = False
@@ -42,8 +44,10 @@ logger = logging.getLogger(__name__)
 
 # --- Configuration Strategy Pattern ---
 
+
 class ModelProfile:
     """Strategy interface for model-specific configurations."""
+
     def __init__(self, name: str, max_seq_length: int = 512):
         self.name = name
         self.max_seq_length = max_seq_length
@@ -55,6 +59,7 @@ class ModelProfile:
 
 class E5ModelProfile(ModelProfile):
     """Configuration for E5 models which require prefixes."""
+
     def format_text(self, text: str, is_query: bool = True) -> str:
         prefix = "query: " if is_query else "passage: "
         return prefix + text
@@ -62,6 +67,7 @@ class E5ModelProfile(ModelProfile):
 
 class GenericModelProfile(ModelProfile):
     """Default configuration for models that don't need specific formatting."""
+
     pass
 
 
@@ -78,6 +84,7 @@ def detect_model_profile(model_name: str) -> ModelProfile:
 
 
 # --- DTOs ---
+
 
 class TextRequest(BaseModel):
     text: str
@@ -98,6 +105,7 @@ class BatchVectorResponse(BaseModel):
 
 
 # --- New DTOs for Hybrid Search (BGE-M3) ---
+
 
 class HybridTextRequest(BaseModel):
     text: str
@@ -124,6 +132,7 @@ class BatchHybridVectorResponse(BaseModel):
 
 
 # --- Fine-tuning DTOs ---
+
 
 class FineTuneExample(BaseModel):
     query: str
@@ -156,6 +165,7 @@ class LoraTrainRequest(BaseModel):
 
 # --- Engine ---
 
+
 class EmbeddingEngine:
     def __init__(self):
         self.model: Optional[SentenceTransformer] = None
@@ -169,16 +179,20 @@ class EmbeddingEngine:
         try:
             self.profile = detect_model_profile(self.model_name_env)
             local_path = f"./models/{self.model_name_env}"
-            load_source = local_path if os.path.exists(local_path) else self.model_name_env
-            
+            load_source = (
+                local_path if os.path.exists(local_path) else self.model_name_env
+            )
+
             logger.info(f"Loading model from {load_source} to {self.device}...")
 
             # Logic to choose loader
             # If it is BGE-M3 and we have FlagEmbedding library, load via it
             if "bge-m3" in self.profile.name.lower() and FLAG_EMBEDDING_AVAILABLE:
                 logger.info("Initializing BGEM3FlagModel for hybrid capabilities...")
-                self.bge_model = BGEM3FlagModel(load_source, use_fp16=(self.device == "cuda"), device=self.device)
-                
+                self.bge_model = BGEM3FlagModel(
+                    load_source, use_fp16=(self.device == "cuda"), device=self.device
+                )
+
                 # To support legacy methods and fine-tuning (which requires SentenceTransformer),
                 # we also load SentenceTransformer as self.model.
                 # NOTE: This doubles memory usage if loaded simultaneously.
@@ -191,7 +205,7 @@ class EmbeddingEngine:
             if self.model:
                 # Save to local cache if downloaded from Hub
                 if load_source == self.model_name_env:
-                     self.model.save(local_path)
+                    self.model.save(local_path)
                 self.model.max_seq_length = self.profile.max_seq_length
 
             logger.info("Model loaded successfully.")
@@ -218,42 +232,41 @@ class EmbeddingEngine:
     def encode(self, texts: List[str], is_query: bool = True) -> List[List[float]]:
         if self.model is None:
             raise RuntimeError("Model is not loaded")
-        
+
         # Apply formatting (prefixes) if needed
         formatted_texts = [self.profile.format_text(t, is_query) for t in texts]
-        
+
         embeddings = self.model.encode(formatted_texts, convert_to_numpy=True)
         return embeddings.tolist()
-    
+
     def encode_hybrid(
-        self, 
-        texts: List[str], 
-        return_colbert: bool = False, 
-        batch_size: int = 12
+        self, texts: List[str], return_colbert: bool = False, batch_size: int = 12
     ) -> List[Dict]:
         """
         New method specifically for BGE-M3, returning 3 types of vectors.
         """
         if self.bge_model is None:
-            raise RuntimeError("BGE-M3 model is not loaded or FlagEmbedding is missing.")
+            raise RuntimeError(
+                "BGE-M3 model is not loaded or FlagEmbedding is missing."
+            )
 
         # FlagEmbedding handles tokenization and batching internally
         output = self.bge_model.encode(
-            texts, 
-            batch_size=batch_size, 
+            texts,
+            batch_size=batch_size,
             max_length=self.profile.max_seq_length,
-            return_dense=True, 
-            return_sparse=True, 
-            return_colbert_vecs=return_colbert 
+            return_dense=True,
+            return_sparse=True,
+            return_colbert_vecs=return_colbert,
         )
-        
+
         results = []
         count = len(texts)
-        
-        dense_vecs = output['dense_vecs']
-        lexical_weights = output['lexical_weights']
+
+        dense_vecs = output["dense_vecs"]
+        lexical_weights = output["lexical_weights"]
         # If return_colbert=False, output['colbert_vecs'] is None
-        colbert_vecs = output.get('colbert_vecs') 
+        colbert_vecs = output.get("colbert_vecs")
 
         for i in range(count):
             # Prepare colbert data only if requested and available
@@ -261,12 +274,14 @@ class EmbeddingEngine:
             if return_colbert and colbert_vecs is not None:
                 c_vecs = colbert_vecs[i].tolist()
 
-            results.append({
-                "dense": dense_vecs[i].tolist(),
-                "sparse": lexical_weights[i],
-                "colbert": c_vecs
-            })
-            
+            results.append(
+                {
+                    "dense": dense_vecs[i].tolist(),
+                    "sparse": lexical_weights[i],
+                    "colbert": c_vecs,
+                }
+            )
+
         return results
 
 
@@ -291,11 +306,13 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/health")
 async def health():
     if engine.model is None and engine.bge_model is None:
-         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model not loaded"
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Model not loaded"
         )
-    return {"status": "ok", "model": engine.profile.name if engine.profile else "unknown"}
+    return {
+        "status": "ok",
+        "model": engine.profile.name if engine.profile else "unknown",
+    }
 
 
 @app.post("/vectorize", response_model=VectorResponse)
@@ -305,7 +322,7 @@ async def vectorize(req: TextRequest):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Model is currently training or initializing.",
         )
-    
+
     try:
         embedding = engine.encode([req.text], is_query=req.is_query)[0]
         return {"vector": embedding}
@@ -668,9 +685,9 @@ async def vectorize_hybrid(req: HybridTextRequest):
     """
     if engine.bge_model is None:
         if engine.model is not None:
-             raise HTTPException(
-                status_code=400, 
-                detail="Hybrid encoding is available only for BGE-M3 models using FlagEmbedding."
+            raise HTTPException(
+                status_code=400,
+                detail="Hybrid encoding is available only for BGE-M3 models using FlagEmbedding.",
             )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -680,9 +697,7 @@ async def vectorize_hybrid(req: HybridTextRequest):
     try:
         # Pass only text and colbert flag
         result_list = engine.encode_hybrid(
-            [req.text], 
-            return_colbert=req.return_colbert, 
-            batch_size=1
+            [req.text], return_colbert=req.return_colbert, batch_size=1
         )
         # result_list is a list of dicts, but we need to convert it to HybridVector model
         # However, pydantic should handle dict to model conversion
@@ -696,9 +711,9 @@ async def vectorize_hybrid(req: HybridTextRequest):
 async def vectorize_batch_hybrid(req: HybridBatchTextRequest):
     if engine.bge_model is None:
         if engine.model is not None:
-             raise HTTPException(
-                status_code=400, 
-                detail="Hybrid encoding is available only for BGE-M3 models using FlagEmbedding."
+            raise HTTPException(
+                status_code=400,
+                detail="Hybrid encoding is available only for BGE-M3 models using FlagEmbedding.",
             )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -707,10 +722,8 @@ async def vectorize_batch_hybrid(req: HybridBatchTextRequest):
 
     try:
         results = engine.encode_hybrid(
-            req.items, 
-            return_colbert=req.return_colbert, 
-            batch_size=16
-        ) 
+            req.items, return_colbert=req.return_colbert, batch_size=16
+        )
         return {"hybrid_vectors": results}
     except Exception as e:
         logger.error(f"Batch hybrid vectorization error: {e}")
