@@ -413,9 +413,6 @@ def train_worker(job_id: str, req: TrainRequest):
         # We can simulate this by formatting an empty string or standard text.
         # Or better: check if it's E5 profile, but that breaks polymorphism.
         # Let's derive prefixes by formatting an empty string? No, "query: ".
-        q_example = base_profile.format_text("", is_query=True)
-        p_example = base_profile.format_text("", is_query=False)
-
         # Heuristic: if format_text adds something, that's the prefix.
         # But E5 adds "query: ", while others might add nothing.
         # If we use format_text inside the loop, we are safe.
