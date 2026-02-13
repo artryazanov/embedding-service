@@ -1,8 +1,10 @@
-import pytest
 from unittest.mock import MagicMock, patch
-from fastapi.testclient import TestClient
-from main import app, engine, HybridVectorResponse, BatchHybridVectorResponse
+
 import numpy as np
+import pytest
+from fastapi.testclient import TestClient
+
+from main import BatchHybridVectorResponse, HybridVectorResponse, app, engine
 
 client = TestClient(app)
 
