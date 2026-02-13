@@ -1,4 +1,3 @@
-
 from main import detect_model_profile
 
 
