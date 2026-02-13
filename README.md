@@ -188,6 +188,36 @@ The service uses a **Smart Strategy Pattern** to automatically configure itself 
 }
 ```
 
+### Hybrid Vectorization (BGE-M3)
+**Endpoint:** `POST /vectorize-hybrid`
+
+Specifically designed for **BAAI/bge-m3**, this endpoint returns three types of representations:
+1. **Dense**: Standard embedding (1024-d).
+2. **Sparse**: Lexical weights (keyword importance).
+3. **ColBERT**: Multi-vector representation (one vector per token).
+
+**Request:**
+```json
+{
+  "text": "Hello world",
+  "return_colbert": true
+}
+```
+
+**Response:**
+```json
+{
+  "hybrid_vector": {
+    "dense": [0.1, 0.2, ...],
+    "sparse": {"hello": 0.5, "world": 0.6},
+    "colbert": [[0.1, ...], [0.3, ...]]
+  }
+}
+```
+
+**Dataset Batch:** `POST /vectorize-batch-hybrid`
+Accepts `items` (list of strings) and `return_colbert` flag.
+
 ### Train/Fine-tune Model
 **Endpoint:** `POST /fine-tune`
 

@@ -7,6 +7,9 @@ from typing import Any, Dict, List, Optional, cast
 
 import datasets
 import torch
+import uvicorn
+from contextlib import asynccontextmanager
+
 import torch.nn as nn
 from fastapi import BackgroundTasks, FastAPI, HTTPException, status
 from peft import (
@@ -24,180 +27,57 @@ from sentence_transformers import (
     losses,
 )
 from transformers import BitsAndBytesConfig, TrainerCallback
+# Try to import FlagEmbedding for BGE-M3 hybrid features
+try:
+    from FlagEmbedding import BGEM3FlagModel
+    FLAG_EMBEDDING_AVAILABLE = True
+except ImportError:
+    FLAG_EMBEDDING_AVAILABLE = False
 
-# --- Configuration & Logging ---
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler()],
-)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Fix CUDA fragmentation
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-# --- Domain Models ---
+# --- Configuration Strategy Pattern ---
 
-
-@dataclass
 class ModelProfile:
-    """Describes the characteristics and requirements of a specific model."""
+    """Strategy interface for model-specific configurations."""
+    def __init__(self, name: str, max_seq_length: int = 512):
+        self.name = name
+        self.max_seq_length = max_seq_length
 
-    name: str
-    max_seq_length: int
-    requires_prefix: bool
-
-    @property
-    def query_prefix(self) -> str:
-        return "query: " if self.requires_prefix else ""
-
-    @property
-    def passage_prefix(self) -> str:
-        return "passage: " if self.requires_prefix else ""
+    def format_text(self, text: str, is_query: bool = True) -> str:
+        """Formats text according to model requirements (e.g. adding prefixes)."""
+        return text
 
 
-def detect_model_profile(model_name_path: str) -> ModelProfile:
-    """
-    Configuration factory. Determines settings based on the model name.
-    Supports: E5 family, BGE-M3 family.
-    """
-    normalized_name = model_name_path.lower()
-
-    if "e5" in normalized_name:
-        logger.info(f"Detected E5-based model architecture for '{model_name_path}'")
-        return ModelProfile(
-            name=model_name_path,
-            max_seq_length=512,
-            requires_prefix=True,
-        )
-
-    if "bge-m3" in normalized_name:
-        logger.info(f"Detected BGE-M3 architecture for '{model_name_path}'")
-        return ModelProfile(
-            name=model_name_path,
-            max_seq_length=8192,
-            requires_prefix=False,
-        )
-
-    # If the model is not recognized, raise an error to prevent incorrect operation
-    error_msg = (
-        f"Unsupported model architecture: '{model_name_path}'. "
-        "System currently supports only 'multilingual-e5' and 'bge-m3' variants."
-    )
-    logger.error(error_msg)
-    raise ValueError(error_msg)
+class E5ModelProfile(ModelProfile):
+    """Configuration for E5 models which require prefixes."""
+    def format_text(self, text: str, is_query: bool = True) -> str:
+        prefix = "query: " if is_query else "passage: "
+        return prefix + text
 
 
-# --- Service Layer ---
+class GenericModelProfile(ModelProfile):
+    """Default configuration for models that don't need specific formatting."""
+    pass
 
 
-class EmbeddingEngine:
-    """
-    Manager class controlling the model lifecycle.
-    Implements the Singleton pattern at the module level (via instance).
-    """
-
-    def __init__(self):
-        self.model: Optional[SentenceTransformer] = None
-        self.profile: Optional[ModelProfile] = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model_name_env = os.getenv("MODEL_NAME", "intfloat/multilingual-e5-large")
-
-    def load(self):
-        """Loads the model, applying settings appropriate to the profile."""
-        self._cleanup_memory()
-
-        try:
-            # First determine the profile to ensure the model is supported
-            self.profile = detect_model_profile(self.model_name_env)
-
-            local_path = f"./models/{self.model_name_env}"
-            load_source = (
-                local_path if os.path.exists(local_path) else self.model_name_env
-            )
-
-            logger.info(f"Loading model from {load_source} to {self.device}...")
-
-            self.model = SentenceTransformer(load_source, device=self.device)
-
-            # If loading from network, save locally to cache
-            if load_source == self.model_name_env:
-                logger.info(f"Saving model to {local_path} for future use...")
-                self.model.save(local_path)
-
-            # Apply profile settings
-            self.model.max_seq_length = self.profile.max_seq_length
-            logger.info(
-                f"Model loaded. Max Seq Len: {self.model.max_seq_length}, "
-                f"Prefix: {self.profile.requires_prefix}"
-            )
-
-        except Exception as e:
-            logger.critical(f"Failed to load model: {e}")
-            raise e
-
-    def unload(self):
-        """Completely unloads the model from memory."""
-        if self.model is not None:
-            del self.model
-            self.model = None
-        self._cleanup_memory()
-        logger.info("Model unloaded. VRAM cleared.")
-
-    def _cleanup_memory(self):
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-    def encode(
-        self,
-        texts: List[str],
-        is_query: bool,
-        batch_size: int = 64,
-    ) -> List[List[float]]:
-        if self.model is None or self.profile is None:
-            raise RuntimeError("Model is not loaded")
-
-        # Logic for adding prefixes is encapsulated here
-        prefix = self.profile.query_prefix if is_query else self.profile.passage_prefix
-
-        # If prefix is empty (BGE-M3), just take the text, otherwise concatenate
-        processed_texts = [f"{prefix}{t}" for t in texts]
-
-        embeddings = self.model.encode(
-            processed_texts,
-            normalize_embeddings=True,
-            convert_to_tensor=False,
-            batch_size=batch_size,
-            show_progress_bar=False,
-        )
-
-        if hasattr(embeddings, "tolist"):
-            embeddings = embeddings.tolist()
-
-        return cast(List[List[float]], embeddings)
-
-
-# Initialize Engine
-engine = EmbeddingEngine()
-app = FastAPI()
-
-# --- API Events ---
-
-
-@app.on_event("startup")
-async def startup_event():
-    try:
-        engine.load()
-    except ValueError as e:
-        # If the model is not supported, the app should not start silently
-        logger.error(f"Startup failed: {e}")
-        # In real prod we could do os._exit(1), but here we leave it to see logs
-        pass
+def detect_model_profile(model_name: str) -> ModelProfile:
+    """Factory function to select the correct profile based on model name."""
+    lower_name = model_name.lower()
+    if "e5" in lower_name:
+        return E5ModelProfile(model_name, max_seq_length=512)
+    elif "bge-m3" in lower_name:
+        # BGE-M3 supports up to 8192, but we default to 8192 or less depending on resources
+        return GenericModelProfile(model_name, max_seq_length=8192)
+    else:
+        return GenericModelProfile(model_name)
 
 
 # --- DTOs ---
-
 
 class TextRequest(BaseModel):
     text: str
@@ -207,6 +87,56 @@ class TextRequest(BaseModel):
 class BatchTextRequest(BaseModel):
     items: List[str]
     is_query: bool = False
+
+
+class VectorResponse(BaseModel):
+    vector: List[float]
+
+
+class BatchVectorResponse(BaseModel):
+    vectors: List[List[float]]
+
+
+# --- New DTOs for Hybrid Search (BGE-M3) ---
+
+class HybridTextRequest(BaseModel):
+    text: str
+    return_colbert: bool = False
+
+
+class HybridBatchTextRequest(BaseModel):
+    items: List[str]
+    return_colbert: bool = False
+
+
+class HybridVector(BaseModel):
+    dense: List[float]
+    sparse: Dict[str, float]
+    colbert: Optional[List[List[float]]] = None
+
+
+class HybridVectorResponse(BaseModel):
+    hybrid_vector: HybridVector
+
+
+class BatchHybridVectorResponse(BaseModel):
+    hybrid_vectors: List[HybridVector]
+
+
+# --- Fine-tuning DTOs ---
+
+class FineTuneExample(BaseModel):
+    query: str
+    pos: List[str]
+    neg: List[str]
+
+
+class FineTuneRequest(BaseModel):
+    examples: List[FineTuneExample]
+    num_epochs: int = 1
+    batch_size: int = 16
+    warmup_steps: float = 0.1
+    learning_rate: float = 2e-5
 
 
 class TrainRequest(BaseModel):
@@ -224,27 +154,167 @@ class LoraTrainRequest(BaseModel):
     use_qlora: bool = True  # Use 4-bit quantization
 
 
-# --- Endpoints ---
+# --- Engine ---
+
+class EmbeddingEngine:
+    def __init__(self):
+        self.model: Optional[SentenceTransformer] = None
+        self.bge_model: Optional[Any] = None  # Slot for BGEM3FlagModel
+        self.profile: Optional[ModelProfile] = None
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model_name_env = os.getenv("MODEL_NAME", "intfloat/multilingual-e5-large")
+
+    def load(self):
+        self._cleanup_memory()
+        try:
+            self.profile = detect_model_profile(self.model_name_env)
+            local_path = f"./models/{self.model_name_env}"
+            load_source = local_path if os.path.exists(local_path) else self.model_name_env
+            
+            logger.info(f"Loading model from {load_source} to {self.device}...")
+
+            # Logic to choose loader
+            # If it is BGE-M3 and we have FlagEmbedding library, load via it
+            if "bge-m3" in self.profile.name.lower() and FLAG_EMBEDDING_AVAILABLE:
+                logger.info("Initializing BGEM3FlagModel for hybrid capabilities...")
+                self.bge_model = BGEM3FlagModel(load_source, use_fp16=(self.device == "cuda"), device=self.device)
+                
+                # To support legacy methods and fine-tuning (which requires SentenceTransformer),
+                # we also load SentenceTransformer as self.model.
+                # NOTE: This doubles memory usage if loaded simultaneously.
+                # Ideally, one should migrate completely, but for backward compatibility we keep both for now if needed.
+                self.model = SentenceTransformer(load_source, device=self.device)
+            else:
+                self.model = SentenceTransformer(load_source, device=self.device)
+                self.bge_model = None
+
+            if self.model:
+                # Save to local cache if downloaded from Hub
+                if load_source == self.model_name_env:
+                     self.model.save(local_path)
+                self.model.max_seq_length = self.profile.max_seq_length
+
+            logger.info("Model loaded successfully.")
+
+        except Exception as e:
+            logger.critical(f"Failed to load model: {e}")
+            raise e
+
+    def unload(self):
+        if self.model is not None:
+            del self.model
+            self.model = None
+        if self.bge_model is not None:
+            del self.bge_model
+            self.bge_model = None
+        self._cleanup_memory()
+        logger.info("Model unloaded.")
+
+    def _cleanup_memory(self):
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+
+    def encode(self, texts: List[str], is_query: bool = True) -> List[List[float]]:
+        if self.model is None:
+            raise RuntimeError("Model is not loaded")
+        
+        # Apply formatting (prefixes) if needed
+        formatted_texts = [self.profile.format_text(t, is_query) for t in texts]
+        
+        embeddings = self.model.encode(formatted_texts, convert_to_numpy=True)
+        return embeddings.tolist()
+    
+    def encode_hybrid(
+        self, 
+        texts: List[str], 
+        return_colbert: bool = False, 
+        batch_size: int = 12
+    ) -> List[Dict]:
+        """
+        New method specifically for BGE-M3, returning 3 types of vectors.
+        """
+        if self.bge_model is None:
+            raise RuntimeError("BGE-M3 model is not loaded or FlagEmbedding is missing.")
+
+        # FlagEmbedding handles tokenization and batching internally
+        output = self.bge_model.encode(
+            texts, 
+            batch_size=batch_size, 
+            max_length=self.profile.max_seq_length,
+            return_dense=True, 
+            return_sparse=True, 
+            return_colbert_vecs=return_colbert 
+        )
+        
+        results = []
+        count = len(texts)
+        
+        dense_vecs = output['dense_vecs']
+        lexical_weights = output['lexical_weights']
+        # If return_colbert=False, output['colbert_vecs'] is None
+        colbert_vecs = output.get('colbert_vecs') 
+
+        for i in range(count):
+            # Prepare colbert data only if requested and available
+            c_vecs = None
+            if return_colbert and colbert_vecs is not None:
+                c_vecs = colbert_vecs[i].tolist()
+
+            results.append({
+                "dense": dense_vecs[i].tolist(),
+                "sparse": lexical_weights[i],
+                "colbert": c_vecs
+            })
+            
+        return results
 
 
-@app.post("/vectorize")
+engine = EmbeddingEngine()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    try:
+        engine.load()
+    except Exception:
+        pass  # Logged in load()
+    yield
+    # Shutdown
+    engine.unload()
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/health")
+async def health():
+    if engine.model is None and engine.bge_model is None:
+         raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Model not loaded"
+        )
+    return {"status": "ok", "model": engine.profile.name if engine.profile else "unknown"}
+
+
+@app.post("/vectorize", response_model=VectorResponse)
 async def vectorize(req: TextRequest):
     if engine.model is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Model is currently training or initializing.",
         )
-
+    
     try:
-        # For a single request, wrap in a list, then extract the first element
-        vector = engine.encode([req.text], is_query=req.is_query, batch_size=1)[0]
-        return {"vector": vector}
+        embedding = engine.encode([req.text], is_query=req.is_query)[0]
+        return {"vector": embedding}
     except Exception as e:
         logger.error(f"Vectorization error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/vectorize-batch")
+@app.post("/vectorize-batch", response_model=BatchVectorResponse)
 async def vectorize_batch(req: BatchTextRequest):
     if engine.model is None:
         raise HTTPException(
@@ -589,6 +659,62 @@ def train_lora_worker(job_id: str, req: LoraTrainRequest):
             engine.load()
         except Exception:
             pass
+
+
+@app.post("/vectorize-hybrid", response_model=HybridVectorResponse)
+async def vectorize_hybrid(req: HybridTextRequest):
+    """
+    Endpoint for BGE-M3. Returns Dense, Sparse, and optionally ColBERT vectors.
+    """
+    if engine.bge_model is None:
+        if engine.model is not None:
+             raise HTTPException(
+                status_code=400, 
+                detail="Hybrid encoding is available only for BGE-M3 models using FlagEmbedding."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Model is initializing.",
+        )
+
+    try:
+        # Pass only text and colbert flag
+        result_list = engine.encode_hybrid(
+            [req.text], 
+            return_colbert=req.return_colbert, 
+            batch_size=1
+        )
+        # result_list is a list of dicts, but we need to convert it to HybridVector model
+        # However, pydantic should handle dict to model conversion
+        return {"hybrid_vector": result_list[0]}
+    except Exception as e:
+        logger.error(f"Hybrid vectorization error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/vectorize-batch-hybrid", response_model=BatchHybridVectorResponse)
+async def vectorize_batch_hybrid(req: HybridBatchTextRequest):
+    if engine.bge_model is None:
+        if engine.model is not None:
+             raise HTTPException(
+                status_code=400, 
+                detail="Hybrid encoding is available only for BGE-M3 models using FlagEmbedding."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Model is initializing.",
+        )
+
+    try:
+        results = engine.encode_hybrid(
+            req.items, 
+            return_colbert=req.return_colbert, 
+            batch_size=16
+        ) 
+        return {"hybrid_vectors": results}
+    except Exception as e:
+        logger.error(f"Batch hybrid vectorization error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/fine-tune")
