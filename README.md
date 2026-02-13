@@ -44,6 +44,7 @@ You MUST pass `--gpus all` to enable GPU access inside the container.
 
 ```bash
 docker run -d -p 8000:8000 --gpus all \
+  -e CUDA_VISIBLE_DEVICES=0 \
   -v $(pwd)/models:/app/models \
   -e MODEL_NAME=intfloat/multilingual-e5-large \
   --name embedding-service embedding-service:gpu
@@ -106,6 +107,7 @@ To use a **local model** (e.g., for offline usage or a custom fine-tuned model):
 **Example Command:**
 ```bash
 docker run -d -p 8000:8000 --gpus all \
+  -e CUDA_VISIBLE_DEVICES=0 \
   -v $(pwd)/models:/app/models \
   -e MODEL_NAME=my-custom-model \
   embedding-service:gpu

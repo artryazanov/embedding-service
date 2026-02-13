@@ -168,7 +168,7 @@ class EmbeddingEngine:
         self.model: Optional[SentenceTransformer] = None
         self.bge_model: Optional[Any] = None  # Slot for BGEM3FlagModel
         self.profile: Optional[ModelProfile] = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.model_name_env = os.getenv("MODEL_NAME", "intfloat/multilingual-e5-large")
 
     def load(self):
@@ -188,7 +188,7 @@ class EmbeddingEngine:
                 logger.info("Initializing BGEM3FlagModel for hybrid capabilities...")
                 self.bge_model = BGEM3FlagModel(
                     load_source,
-                    use_fp16=(self.device == "cuda"),
+                    use_fp16=("cuda" in self.device),
                     device=self.device,
                 )
 
