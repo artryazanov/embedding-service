@@ -1,3 +1,4 @@
+import numpy as np
 import os
 import sys
 from unittest.mock import MagicMock, patch
@@ -24,7 +25,7 @@ def mock_sentence_transformer():
 
         # Setup default behaviors for the mock instance
         # Mocking encode to return a dummy vector
-        mock_instance.encode.return_value = [[0.1, 0.2, 0.3]]
+        mock_instance.encode.return_value = np.array([[0.1, 0.2, 0.3]])
 
         # When SentenceTransformer(...) is called, return this mock_instance
         mock.return_value = mock_instance

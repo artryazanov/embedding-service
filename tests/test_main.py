@@ -1,4 +1,5 @@
 from unittest.mock import patch
+import numpy as np
 
 from main import engine
 
@@ -42,7 +43,7 @@ def test_vectorize_batch_success(client, mock_sentence_transformer):
     # SentenceTransformer.encode(list) returns a list of embeddings (numpy arrays).
 
     # We need to make sure our mock returns a list of lists for batch inputs
-    mock_sentence_transformer.encode.return_value = [[0.1, 0.1], [0.2, 0.2]]
+    mock_sentence_transformer.encode.return_value = np.array([[0.1, 0.1], [0.2, 0.2]])
 
     response = client.post(
         "/vectorize-batch", json={"items": ["text1", "text2"], "is_query": False}

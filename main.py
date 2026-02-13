@@ -229,14 +229,18 @@ class EmbeddingEngine:
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
 
-    def encode(self, texts: List[str], is_query: bool = True) -> List[List[float]]:
+    def encode(
+        self, texts: List[str], is_query: bool = True, batch_size: int = 32
+    ) -> List[List[float]]:
         if self.model is None:
             raise RuntimeError("Model is not loaded")
 
         # Apply formatting (prefixes) if needed
         formatted_texts = [self.profile.format_text(t, is_query) for t in texts]
 
-        embeddings = self.model.encode(formatted_texts, convert_to_numpy=True)
+        embeddings = self.model.encode(
+            formatted_texts, batch_size=batch_size, convert_to_numpy=True
+        )
         return embeddings.tolist()
 
     def encode_hybrid(
