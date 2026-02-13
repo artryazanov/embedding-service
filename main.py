@@ -1,15 +1,12 @@
-import gc
 import logging
 import os
 import uuid
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast
 
 import datasets
 import torch
 import torch.nn as nn
-import uvicorn
 from fastapi import BackgroundTasks, FastAPI, HTTPException, status
 from peft import (
     LoraConfig,
@@ -189,13 +186,16 @@ class EmbeddingEngine:
             if "bge-m3" in self.profile.name.lower() and FLAG_EMBEDDING_AVAILABLE:
                 logger.info("Initializing BGEM3FlagModel for hybrid capabilities...")
                 self.bge_model = BGEM3FlagModel(
-                    load_source, use_fp16=(self.device == "cuda"), device=self.device
+                    load_source,
+                    use_fp16=(self.device == "cuda"),
+                    device=self.device,
                 )
 
                 # To support legacy methods and fine-tuning (which requires SentenceTransformer),
                 # we also load SentenceTransformer as self.model.
                 # NOTE: This doubles memory usage if loaded simultaneously.
-                # Ideally, one should migrate completely, but for backward compatibility we keep both for now if needed.
+                # Ideally, one should migrate completely, but for backward compatibility
+                # we keep both for now if needed.
                 self.model = SentenceTransformer(load_source, device=self.device)
             else:
                 self.model = SentenceTransformer(load_source, device=self.device)
@@ -690,7 +690,10 @@ async def vectorize_hybrid(req: HybridTextRequest):
         if engine.model is not None:
             raise HTTPException(
                 status_code=400,
-                detail="Hybrid encoding is available only for BGE-M3 models using FlagEmbedding.",
+                detail=(
+                    "Hybrid encoding is available only for BGE-M3 models using "
+                    "FlagEmbedding."
+                ),
             )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -716,7 +719,10 @@ async def vectorize_batch_hybrid(req: HybridBatchTextRequest):
         if engine.model is not None:
             raise HTTPException(
                 status_code=400,
-                detail="Hybrid encoding is available only for BGE-M3 models using FlagEmbedding.",
+                detail=(
+                    "Hybrid encoding is available only for BGE-M3 models using "
+                    "FlagEmbedding."
+                ),
             )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
