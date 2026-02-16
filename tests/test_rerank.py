@@ -19,7 +19,7 @@ def mock_bge_model():
     if not hasattr(main, "BGEM3FlagModel"):
         main.BGEM3FlagModel = MagicMock()
 
-    with patch("main.BGEM3FlagModel") as mock:
+    with patch("main.BGEM3FlagModel"):
         mock_instance = MagicMock()
 
         # Mock behavior for encode
