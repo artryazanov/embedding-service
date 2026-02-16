@@ -1,8 +1,10 @@
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pytest
-from unittest.mock import MagicMock, patch
-from main import engine, app
 from fastapi.testclient import TestClient
+
+from main import app, engine
 
 client = TestClient(app)
 
