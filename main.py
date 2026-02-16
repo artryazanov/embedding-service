@@ -160,6 +160,16 @@ class LoraTrainRequest(BaseModel):
     use_qlora: bool = True  # Use 4-bit quantization
 
 
+class RerankRequest(BaseModel):
+    query: str
+    candidates: List[str]
+    batch_size: int = 12
+
+
+class RerankResponse(BaseModel):
+    scores: List[float]
+
+
 # --- Engine ---
 
 
@@ -293,6 +303,73 @@ class EmbeddingEngine:
             )
 
         return results
+
+    def rerank_colbert(
+        self, query: str, candidates: List[str], batch_size: int = 12
+    ) -> List[float]:
+        """
+        Computes MaxSim scores for a query and a list of candidates.
+        Optimized to encode query once and process candidates in batches.
+        """
+        if self.bge_model is None:
+            raise RuntimeError("BGE-M3 model is not loaded.")
+
+        if not candidates:
+            return []
+
+        # 1. Encode Query (Only once!)
+        # We don't need dense/sparse for reranking, only ColBERT
+        q_output = self.bge_model.encode(
+            [query],
+            return_dense=False,
+            return_sparse=False,
+            return_colbert_vecs=True,
+            max_length=self.profile.max_seq_length if self.profile else 8192,
+        )
+        # Result is a list of numpy arrays, take the first one
+        q_vecs_np = q_output["colbert_vecs"][0]
+
+        # 2. Encode Candidates (Batch processing handled by FlagEmbedding)
+        d_output = self.bge_model.encode(
+            candidates,
+            batch_size=batch_size,
+            return_dense=False,
+            return_sparse=False,
+            return_colbert_vecs=True,
+            max_length=self.profile.max_seq_length if self.profile else 8192,
+        )
+        d_vecs_list = d_output["colbert_vecs"]
+
+        scores = []
+
+        # 3. Compute MaxSim using PyTorch for speed
+        # Ensure we are in no_grad context to save memory
+        with torch.no_grad():
+            # Move query to device
+            q_tensor = torch.tensor(q_vecs_np).to(self.device)  # Shape: (N_q, Dim)
+
+            for d_vec_np in d_vecs_list:
+                if d_vec_np is None:
+                    # Fallback for empty/error cases
+                    scores.append(0.0)
+                    continue
+
+                d_tensor = torch.tensor(d_vec_np).to(self.device)  # Shape: (N_d, Dim)
+
+                # MaxSim calculation:
+                # 1. Similarity Matrix (Dot Product): (N_q, N_d)
+                # using matmul: (N_q, D) @ (D, N_d) -> (N_q, N_d)
+                sim_matrix = torch.matmul(q_tensor, d_tensor.T)
+
+                # 2. Max similarity for each query token across all doc tokens
+                # dim=1 means max across the document dimension (columns)
+                max_sim_scores, _ = torch.max(sim_matrix, dim=1)
+
+                # 3. Sum of maximum similarities
+                score = torch.sum(max_sim_scores).item()
+                scores.append(score)
+
+        return scores
 
 
 engine = EmbeddingEngine()
@@ -750,6 +827,32 @@ async def vectorize_batch_hybrid(req: HybridBatchTextRequest):
         return {"hybrid_vectors": results}
     except Exception as e:
         logger.error(f"Batch hybrid vectorization error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/rerank", response_model=RerankResponse)
+async def rerank(req: RerankRequest):
+    """
+    Reranks a list of candidate texts against a query using ColBERT (MaxSim).
+    Returns a list of scores corresponding to the order of candidates.
+    """
+    if engine.bge_model is None:
+        if engine.model is not None:
+            raise HTTPException(
+                status_code=400, detail="Reranking is available only for BGE-M3 models."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Model is initializing.",
+        )
+
+    try:
+        scores = engine.rerank_colbert(
+            req.query, req.candidates, batch_size=req.batch_size
+        )
+        return {"scores": scores}
+    except Exception as e:
+        logger.error(f"Reranking error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

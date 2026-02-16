@@ -220,6 +220,39 @@ Specifically designed for **BAAI/bge-m3**, this endpoint returns three types of 
 **Dataset Batch:** `POST /vectorize-batch-hybrid`
 Accepts `items` (list of strings) and `return_colbert` flag.
 
+### Rerank (MaxSim)
+**Endpoint:** `POST /rerank`
+
+Calculates the MaxSim score (using ColBERT vectors) between a query and a list of candidates. 
+This is highly optimized:
+- **Query Encoding:** Encodes the query only once (unlike naive pair-wise approaches).
+- **GPU Acceleration:** Uses PyTorch for fast matrix multiplication and max-pooling.
+- **Traffic Reduction:** Performs heavy vector calculations on the server, returning only the final scores.
+
+**Request:**
+```json
+{
+  "query": "What is hybrid search?",
+  "candidates": [
+    "Hybrid search combines dense and sparse vectors.",
+    "ColBERT uses late interaction for better precision.",
+    "Unrelated text about cooking."
+  ],
+  "batch_size": 12
+}
+```
+
+**Response:**
+```json
+{
+  "scores": [
+    0.85,
+    0.92,
+    0.15
+  ]
+}
+```
+
 ### Train/Fine-tune Model
 **Endpoint:** `POST /fine-tune`
 
