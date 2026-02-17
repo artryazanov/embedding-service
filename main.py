@@ -198,7 +198,7 @@ class EmbeddingEngine:
                 logger.info("Initializing BGEM3FlagModel for hybrid capabilities...")
                 self.bge_model = BGEM3FlagModel(
                     load_source,
-                    use_fp16=("cuda" in self.device),
+                    use_fp16=False,
                     device=self.device,
                 )
 
