@@ -2,7 +2,7 @@ fastapi==0.129.0
 uvicorn==0.41.0
 sentence-transformers==3.3.1
 torch==2.10.0
-transformers==4.46.3
+transformers==5.2.0
 accelerate==1.12.0
 nltk
 datasets
