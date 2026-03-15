@@ -1,14 +1,15 @@
 import os
 import sys
 from unittest.mock import MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
 
 # Add project root to sys.path to ensure we can import main
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main import app  # noqa: E402
 from engine import engine
+from main import app  # noqa: E402
 
 
 @pytest.fixture

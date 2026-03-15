@@ -2,8 +2,10 @@ import asyncio
 import json
 import logging
 import uuid
+
 import websockets
 from websockets.exceptions import ConnectionClosed
+
 from config import settings
 from engine import engine
 

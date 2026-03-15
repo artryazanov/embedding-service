@@ -1,8 +1,10 @@
-import pytest
-from unittest.mock import patch, MagicMock
-from engine import EmbeddingEngine
-import torch
+from unittest.mock import MagicMock, patch
+
 import numpy as np
+import pytest
+import torch
+
+from engine import EmbeddingEngine
 
 
 @pytest.fixture

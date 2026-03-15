@@ -1,9 +1,11 @@
-import pytest
 import asyncio
 import json
-from unittest.mock import patch, MagicMock, AsyncMock
-from worker import websocket_worker_task
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from websockets.exceptions import ConnectionClosed
+
+from worker import websocket_worker_task
 
 
 @pytest.fixture

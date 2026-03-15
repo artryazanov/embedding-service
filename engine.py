@@ -1,8 +1,10 @@
 import logging
 import os
-import torch
 from typing import List, Optional
+
+import torch
 from sentence_transformers import SentenceTransformer
+
 from config import settings
 
 logger = logging.getLogger(__name__)
