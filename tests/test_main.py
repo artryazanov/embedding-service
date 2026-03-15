@@ -4,7 +4,8 @@ from main import engine
 
 
 def test_health_success(client):
-    # Model should be mocked as loaded by the mock_engine_load_unload fixture in conftest
+    # Model should be mocked as loaded by the mock_engine_load_unload
+    # fixture in conftest
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
