@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 # Add project root to sys.path to ensure we can import main
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from engine import engine
+from engine import engine  # noqa: E402
 from main import app  # noqa: E402
 
 

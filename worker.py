@@ -22,7 +22,7 @@ async def websocket_worker_task():
     worker_id = str(uuid.uuid4())
     worker_channel = f"worker-python-{worker_id}"
     ws_scheme = "wss" if settings.reverb_scheme == "https" else "ws"
-    uri = f"{ws_scheme}://{settings.reverb_host}:{settings.reverb_port}/app/{settings.reverb_app_key}?protocol=7&client=python&version=1.0.0"
+    uri = f"{ws_scheme}://{settings.reverb_host}:{settings.reverb_port}/app/{settings.reverb_app_key}?protocol=7&client=python&version=1.0.0"  # noqa: E501
 
     dev_type = "gpu" if engine.is_gpu else "cpu"
     retry_delay = 1.0

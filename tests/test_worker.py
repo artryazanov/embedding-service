@@ -1,9 +1,8 @@
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from websockets.exceptions import ConnectionClosed
 
 from worker import websocket_worker_task
 
@@ -113,4 +112,5 @@ async def test_worker_batch_process(mock_settings, mock_engine):
         except asyncio.CancelledError:
             pass
 
+        mock_connect.assert_called_once()
         mock_engine.encode.assert_called_once_with(["t1", "t2"], batch_size=64)
