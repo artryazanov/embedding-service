@@ -3,6 +3,7 @@ from unittest.mock import patch
 import numpy as np
 from main import engine
 
+
 def test_health_success(client):
     # Model should be mocked as loaded by the mock_engine_load_unload fixture in conftest
     response = client.get("/health")
@@ -12,6 +13,7 @@ def test_health_success(client):
     assert "model" in data
     assert "device" in data
 
+
 def test_health_unloaded(client):
     # Manually unload
     engine.unload()
@@ -19,18 +21,20 @@ def test_health_unloaded(client):
     assert response.status_code == 503
     assert "Model not loaded" in response.json()["detail"]
 
+
 def test_vectorize_success(client):
-    # Manually ensure it's loaded 
-    engine.model = True # Dummy truthy value to pass "is None" check
+    # Manually ensure it's loaded
+    engine.model = True  # Dummy truthy value to pass "is None" check
     with patch("main.engine.encode", return_value=[[0.1, 0.2, 0.3]]) as mock_encode:
         response = client.post("/vectorize", json={"text": "hello world"})
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "vector" in data
         assert isinstance(data["vector"], list)
         assert data["vector"] == [0.1, 0.2, 0.3]
         mock_encode.assert_called_once_with(["hello world"])
+
 
 def test_vectorize_model_unloaded(client):
     engine.unload()
@@ -39,13 +43,14 @@ def test_vectorize_model_unloaded(client):
     assert response.status_code == 503
     assert response.json()["detail"] == "Model is initializing."
 
+
 def test_vectorize_batch_success(client):
     engine.model = True
-    
-    with patch("main.engine.encode", return_value=[[0.1, 0.1], [0.2, 0.2]]) as mock_encode:
-        response = client.post(
-            "/vectorize-batch", json={"items": ["text1", "text2"]}
-        )
+
+    with patch(
+        "main.engine.encode", return_value=[[0.1, 0.1], [0.2, 0.2]]
+    ) as mock_encode:
+        response = client.post("/vectorize-batch", json={"items": ["text1", "text2"]})
         assert response.status_code == 200
         data = response.json()
         assert "vectors" in data
@@ -53,17 +58,20 @@ def test_vectorize_batch_success(client):
         assert data["vectors"][0] == [0.1, 0.1]
         mock_encode.assert_called_once_with(["text1", "text2"], batch_size=64)
 
+
 def test_verify_token(client):
     with patch("main.settings.api_token", new="supersecret"):
         response = client.get("/health")
         # No token provided
         assert response.status_code == 401
-        
+
         # Wrong token
         response = client.get("/health", headers={"Authorization": "Bearer badtoken"})
         assert response.status_code == 401
-        
+
         # Correct token
         engine.model = True
-        response = client.get("/health", headers={"Authorization": "Bearer supersecret"})
+        response = client.get(
+            "/health", headers={"Authorization": "Bearer supersecret"}
+        )
         assert response.status_code == 200

@@ -12,7 +12,10 @@ from worker import websocket_worker_task
 
 security = HTTPBearer(auto_error=False)
 
-async def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+
+async def verify_token(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
     if settings.api_token:
         if not credentials or credentials.credentials != settings.api_token:
             raise HTTPException(
@@ -22,15 +25,19 @@ async def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = Dep
             )
     return credentials
 
+
 # --- DTOs ---
 class TextRequest(BaseModel):
     text: str
 
+
 class BatchTextRequest(BaseModel):
     items: List[str]
 
+
 class VectorResponse(BaseModel):
     vector: List[float]
+
 
 class BatchVectorResponse(BaseModel):
     vectors: List[List[float]]
@@ -50,7 +57,9 @@ async def lifespan(app: FastAPI):
         pass
     engine.unload()
 
+
 app = FastAPI(lifespan=lifespan, title="BGE-M3 Embedding Service")
+
 
 @app.get("/health", dependencies=[Depends(verify_token)])
 async def health():
@@ -58,13 +67,12 @@ async def health():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Model not loaded"
         )
-    return {
-        "status": "ok",
-        "model": settings.model_name,
-        "device": engine.device
-    }
+    return {"status": "ok", "model": settings.model_name, "device": engine.device}
 
-@app.post("/vectorize", response_model=VectorResponse, dependencies=[Depends(verify_token)])
+
+@app.post(
+    "/vectorize", response_model=VectorResponse, dependencies=[Depends(verify_token)]
+)
 async def vectorize(req: TextRequest):
     if engine.model is None:
         raise HTTPException(status_code=503, detail="Model is initializing.")
@@ -73,7 +81,12 @@ async def vectorize(req: TextRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/vectorize-batch", response_model=BatchVectorResponse, dependencies=[Depends(verify_token)])
+
+@app.post(
+    "/vectorize-batch",
+    response_model=BatchVectorResponse,
+    dependencies=[Depends(verify_token)],
+)
 async def vectorize_batch(req: BatchTextRequest):
     if engine.model is None:
         raise HTTPException(status_code=503, detail="Model is initializing.")

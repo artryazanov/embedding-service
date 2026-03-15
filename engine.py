@@ -7,6 +7,7 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+
 class EmbeddingEngine:
     def __init__(self):
         self.model: Optional[SentenceTransformer] = None
@@ -17,7 +18,7 @@ class EmbeddingEngine:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         else:
             self.device = settings.device
-            
+
         self.is_gpu = "cuda" in self.device
         logger.info(f"Selected inference device: {self.device}")
 
@@ -25,7 +26,9 @@ class EmbeddingEngine:
         self._cleanup_memory()
         try:
             local_path = f"./models/{settings.model_name.replace('/', '_')}"
-            load_source = local_path if os.path.exists(local_path) else settings.model_name
+            load_source = (
+                local_path if os.path.exists(local_path) else settings.model_name
+            )
 
             logger.info(f"Loading model {load_source} on {self.device}...")
             self.model = SentenceTransformer(load_source, device=self.device)
@@ -58,8 +61,11 @@ class EmbeddingEngine:
             raise RuntimeError("Model is not initialized")
 
         # BGE-M3 doesn't require prefixes for base vectorization
-        embeddings = self.model.encode(texts, batch_size=batch_size, convert_to_numpy=True)
+        embeddings = self.model.encode(
+            texts, batch_size=batch_size, convert_to_numpy=True
+        )
         return embeddings.tolist()
+
 
 # Global engine instance
 engine = EmbeddingEngine()
