@@ -1,8 +1,6 @@
 import os
 import sys
 from unittest.mock import MagicMock, patch
-
-import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
@@ -10,31 +8,25 @@ from fastapi.testclient import TestClient
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from main import app  # noqa: E402
-
-
-@pytest.fixture
-def client():
-    return TestClient(app)
-
+from engine import engine
 
 @pytest.fixture
-def mock_sentence_transformer():
-    with patch("main.SentenceTransformer") as mock:
-        # Creating a mock instance that will be returned when initialized
-        mock_instance = MagicMock()
-
-        # Setup default behaviors for the mock instance
-        # Mocking encode to return a dummy vector
-        mock_instance.encode.return_value = np.array([[0.1, 0.2, 0.3]])
-
-        # When SentenceTransformer(...) is called, return this mock_instance
-        mock.return_value = mock_instance
-        yield mock_instance
-
+def mock_engine_load_unload():
+    with patch.object(engine, 'load') as mock_load, \
+         patch.object(engine, 'unload') as mock_unload:
+        # We manually set model to indicate loaded so endpoints don't fail, 
+        # or endpoints use engine.model is not None to check
+        def mock_load_side_effect():
+            engine.model = MagicMock()
+        def mock_unload_side_effect():
+            engine.model = None
+            
+        mock_load.side_effect = mock_load_side_effect
+        mock_unload.side_effect = mock_unload_side_effect
+        yield mock_load, mock_unload
+        engine.model = None
 
 @pytest.fixture
-def mock_trainer():
-    with patch("main.SentenceTransformerTrainer") as mock:
-        mock_instance = MagicMock()
-        mock.return_value = mock_instance
-        yield mock_instance
+def client(mock_engine_load_unload):
+    with TestClient(app) as c:
+        yield c

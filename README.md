@@ -1,6 +1,6 @@
-# Embedding Service
+# BGE-M3 Embedding Service
 
-This is a FastAPI-based service for generating text embeddings, supporting multiple architectures like `intfloat/multilingual-e5-large` and `BAAI/bge-m3`. It automatically configures prefixes and sequence lengths based on the selected model. It supports both single text and batch processing.
+This is a high-performance, FastAPI-based microservice and WebSocket worker dedicated to generating text embeddings using the state-of-the-art **`BAAI/bge-m3`** model. Designed for international scalability, the architecture features a strictly validated configuration system, an intelligent exponential backoff WebSocket client for external integrations, and seamless CPU/GPU Docker deployments.
 
 [![Tests](https://github.com/artryazanov/embedding-service/actions/workflows/tests.yml/badge.svg)](https://github.com/artryazanov/embedding-service/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/gh/artryazanov/embedding-service/graph/badge.svg)](https://codecov.io/gh/artryazanov/embedding-service)
@@ -11,325 +11,130 @@ This is a FastAPI-based service for generating text embeddings, supporting multi
 ![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=flat&logo=PyTorch&logoColor=white)
 ![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-yellow)
 
-## 🔥 Features
-- **Multi-Architecture Support**: Automatically detects and configures for `E5` (prefixes, 512 seq) and `BGE-M3` (no prefixes, 8192 seq) models.
-- **Multilingual Support**: Default: `intfloat/multilingual-e5-large`.
-- **Efficient Fine-Tuning**: Supports **LoRA** and **Q-LoRA** (4-bit quantization) for training large models with minimal memory.
-- **FastAPI**: High performance, easy to use.
-- **GPU Support**: Automatically detects CUDA if available (requires proper PyTorch build).
-- **Batch Processing**: Efficiently vectorize multiple texts at once.
-
-## 🛠 Prerequisites
-- [Docker](https://www.docker.com/) installed.
-- For GPU support: [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed.
+## 🔥 Core Features
+- **Pydantic Driven**: Centralized and type-safe `.env` parsing via `pydantic-settings`.
+- **Dedicated Engine**: Refactored OOP `EmbeddingEngine` tailored specifically for extracting embeddings safely and closing memory leaks reliably.
+- **Robust WebSocket Worker**: A resilient background task connecting to Reverb (`pusher_websocket`) possessing an exponential backoff retry mechanism to guarantee persistent connections under network stress.
+- **FastAPI Core**: A high-performance REST API managed by advanced application `lifespan` generators.
+- **Smart Hardware Detection**: Automatically targets `cuda` if available and safely falls back to `cpu`. 
+- **Modular Dockerfile**: A single Dockerfile handles both CPU and GPU builds natively via `ARG DEVICE`.
 
 ---
 
-## 🚀 Running the Service
+## 🛠 Configuration (`.env`)
 
-### 1️⃣ Run on GPU (Default)
+To start, copy the example configuration.
+```bash
+cp .env.example .env
+```
 
-The default configuration includes standard PyTorch with CUDA support. This is the recommended way to run if you have a GPU.
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `API_TOKEN` | Optional Bearer token for secure REST endpoints. | `None` |
+| `MODEL_NAME` | The HuggingFace model path or local repository name. | `BAAI/bge-m3` |
+| `MAX_SEQ_LENGTH` | Maximum tokens per sequence. | `8192` |
+| `DEVICE` | Target hardware. (`auto`, `cpu`, or `cuda`) | `auto` |
+| `REVERB_APP_KEY` | Reverb integration key for the WebSocket worker. | `None` |
+| `REVERB_HOST` | Host address of the Reverb instance. | `reverb` |
+| `REVERB_PORT` | Port of the Reverb instance. | `8080` |
+| `REVERB_SCHEME` | WebSocket connection layer (`http` maps to `ws`, `https` mappings to `wss`). | `http` |
 
-**Prerequisites:**
-- Ensure you have the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed.
+---
+
+## 🚀 Running the Service (Docker)
+
+### 1️⃣ Run on GPU (Recommended)
+This requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html).
 
 **Build the image:**
 ```bash
+# DEVICE=gpu is the default argument
 docker build -t embedding-service:gpu .
 ```
 
-**Run with GPU access:**
-You MUST pass `--gpus all` to enable GPU access inside the container.
-
+**Launch the container:**
 ```bash
 docker run -d -p 8000:8000 --gpus all \
-  -e CUDA_VISIBLE_DEVICES=0 \
+  --env-file .env \
   -v $(pwd)/models:/app/models \
-  -e MODEL_NAME=intfloat/multilingual-e5-large \
   --name embedding-service embedding-service:gpu
 ```
 
-> **Note:** If you run this image without `--gpus all` (or on a machine without a GPU), it will fall back to CPU, but the image size will be larger than the dedicated CPU-optimized version.
+### 2️⃣ Run on CPU (Space & Compute Optimization)
+If running on a standard server without GPU access, you can build a severely optimized environment relying on PyTorch's `cpu` wheels to drastically lower image weight.
 
----
-
-### 2️⃣ Run on CPU (Optimization)
-
-If you do not have a GPU or want to save disk space, you can build a smaller CPU-only version.
-
-**Step 1: Modify `requirements.txt`**
-Change the line:
-```
-torch
-```
-to the CPU-specific wheel:
-```
-torch --index-url https://download.pytorch.org/whl/cpu
-```
-
-**Step 2: Build the image**
+**Build the optimized image:**
 ```bash
-docker build -t embedding-service:cpu .
+docker build --build-arg DEVICE=cpu -t embedding-service:cpu .
 ```
 
-**Step 3: Run the container**
+**Launch the container:**
 ```bash
 docker run -d -p 8000:8000 \
+  --env-file .env \
   -v $(pwd)/models:/app/models \
-  -e MODEL_NAME=intfloat/multilingual-e5-large \
   --name embedding-service-cpu embedding-service:cpu
 ```
 
 ---
 
-### 3️⃣ Using Custom/Local Models
+## 📚 REST API Usage
 
-By default, the service downloads the model specified by `MODEL_NAME` (default: `intfloat/multilingual-e5-large`) from HuggingFace.
-
-To use a **local model** (e.g., for offline usage or a custom fine-tuned model):
-
-1. **Create a `models` directory** on your host machine.
-2. **Download or place your model** inside this directory.
-   - Example structure:
-     ```
-     ./models/
-     └── my-custom-model/
-         ├── config.json
-         ├── pytorch_model.bin
-         ├── tokenizer.json
-         └── ...
-     ```
-3. **Run the container** with:
-   - `-v $(pwd)/models:/app/models`: Mounts your local models directory into the container.
-   - `-e MODEL_NAME=my-custom-model`: Tells the app which model folder to look for.
-
-**Example Command:**
+### Health & Capabilities (`GET /health`)
+Check service availability, loaded model identity, and active hardware device.
 ```bash
-docker run -d -p 8000:8000 --gpus all \
-  -e CUDA_VISIBLE_DEVICES=0 \
-  -v $(pwd)/models:/app/models \
-  -e MODEL_NAME=my-custom-model \
-  embedding-service:gpu
+curl -X GET "http://localhost:8000/health" \
+     -H "Authorization: Bearer <API_TOKEN_IF_CONFIGURED>"
 ```
 
-The service will check if `/app/models/my-custom-model` exists.
-- If **Yes**: It loads the model locally.
-- If **No**: It attempts to download `my-custom-model` from HuggingFace.
-
-### 4️⃣ Supported Models & Auto-Configuration
-
-The service uses a **Smart Strategy Pattern** to automatically configure itself based on the model name in `MODEL_NAME`:
-
-| Model Family | Detected By | Max Sequence Length | Prefixes (query: / passage:) |
-| :--- | :--- | :--- | :--- |
-| **E5** | "e5" in name | 512 | ✅ Yes |
-| **BGE-M3** | "bge-m3" in name | 8192 | ❌ No |
-| **Other** | - | - | ❌ Error (Unsupported) |
-
-> **Note:** If you use a custom fine-tuned model, ensure its name contains "e5" or "bge-m3" so the service knows how to handle it.
-
-### 🔗 Model Details
-
-- **[intfloat/multilingual-e5-large](https://huggingface.co/intfloat/multilingual-e5-large)**
-  - A specific model from the **E5** family (`E5-Large-V2`).
-  - **Languages**: 94+ languages.
-  - **Context**: 512 tokens.
-  - **Prefixes**: Mandatory (`query: ` for queries, `passage: ` for documents).
-
-- **[BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3)**
-  - A state-of-the-art multilingual model (100+ languages).
-  - **Context**: 8192 tokens (supports long documents).
-  - **Prefixes**: Not required / automatically handled by the model's tokenizer (though this service treats it as no-prefix by default).
-
-## 📚 API Usage
-
-### Health/Docs
-- Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
-- ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
-
-### Generate Embedding (Single)
-**Endpoint:** `POST /vectorize`
-
-**Request:**
-```json
-{
-  "text": "Hello world",
-  "is_query": true
-}
+### Generate Single Embedding (`POST /vectorize`)
+Extract a base embedding array for a single query or document.
+```bash
+curl -X POST "http://localhost:8000/vectorize" \
+     -H "Content-Type: application/json" \
+     -d '{"text": "Artificial Intelligence is evolving rapidly."}'
 ```
-
 **Response:**
 ```json
 {
-  "vector": [0.123, -0.456, ...]
+  "vector": [0.0123, -0.0456, 0.0789, ...]
 }
 ```
 
-### Generate Embeddings (Batch)
-**Endpoint:** `POST /vectorize-batch`
-
-**Request:**
-```json
-{
-  "items": [
-    "Hello world",
-    "Machine learning is great"
-  ],
-  "is_query": false
-}
+### Generate Batch Embeddings (`POST /vectorize-batch`)
+Compute multiple vectors highly optimally in a single pass. (Batch size explicitly chunked internally).
+```bash
+curl -X POST "http://localhost:8000/vectorize-batch" \
+     -H "Content-Type: application/json" \
+     -d '{"items": ["First document segment.", "Second document segment."]}'
 ```
-
 **Response:**
 ```json
 {
   "vectors": [
-    [0.123, ...],
-    [0.789, ...]
+    [0.0123, ...],
+    [-0.0789, ...]
   ]
 }
 ```
 
-### Hybrid Vectorization (BGE-M3)
-**Endpoint:** `POST /vectorize-hybrid`
-
-Specifically designed for **BAAI/bge-m3**, this endpoint returns three types of representations:
-1. **Dense**: Standard embedding (1024-d).
-2. **Sparse**: Lexical weights (keyword importance).
-3. **ColBERT**: Multi-vector representation (one vector per token).
-
-**Request:**
-```json
-{
-  "text": "Hello world",
-  "return_colbert": true
-}
-```
-
-**Response:**
-```json
-{
-  "hybrid_vector": {
-    "dense": [0.1, 0.2, ...],
-    "sparse": {"hello": 0.5, "world": 0.6},
-    "colbert": [[0.1, ...], [0.3, ...]]
-  }
-}
-```
-
-**Dataset Batch:** `POST /vectorize-batch-hybrid`
-Accepts `items` (list of strings) and `return_colbert` flag.
-
-### Rerank (MaxSim)
-**Endpoint:** `POST /rerank`
-
-Calculates the MaxSim score (using ColBERT vectors) between a query and a list of candidates. 
-This is highly optimized:
-- **Query Encoding:** Encodes the query only once (unlike naive pair-wise approaches).
-- **GPU Acceleration:** Uses PyTorch for fast matrix multiplication and max-pooling.
-- **Traffic Reduction:** Performs heavy vector calculations on the server, returning only the final scores.
-
-**Request:**
-```json
-{
-  "query": "What is hybrid search?",
-  "candidates": [
-    "Hybrid search combines dense and sparse vectors.",
-    "ColBERT uses late interaction for better precision.",
-    "Unrelated text about cooking."
-  ],
-  "batch_size": 12
-}
-```
-
-**Response:**
-```json
-{
-  "scores": [
-    0.85,
-    0.92,
-    0.15
-  ]
-}
-```
-
-### Train/Fine-tune Model
-**Endpoint:** `POST /fine-tune`
-
-Starts a background entry to fine-tune the model using Contrastive Learning (MultipleNegativesRankingLoss).
-
-**Input Format:**
-Each line in `text_content` must follow the format:
-`Query Text<TAB>Passage Text`
-
-The separator is a **tab character** (`\t`).
-Lines that do not match this format will be ignored.
-
-**Request:**
-```json
-{
-  "text_content": "Product A\tDescription of Product A\nProduct B\tDescription of Product B",
-  "model_name": "my-finetuned-model"
-}
-```
-
-**Response:**
-```json
-{
-  "job_id": "uuid-string",
-  "status": "pending"
-}
-```
-
-
-### Train/Fine-tune Model (LoRA / Q-LoRA)
-**Endpoint:** `POST /fine-tune-lora`
-
-Efficient fine-tuning using Low-Rank Adaptation (LoRA). Supports 4-bit quantization (Q-LoRA) to drastically reduce memory usage (e.g., training BGE-M3 on consumer GPUs).
-
-**Request:**
-```json
-{
-  "text_content": "Query\tPassage...",
-  "model_name": "my-lora-model",
-  "r": 16,            // Rank (default: 16)
-  "lora_alpha": 32,   // Alpha scaling (default: 32)
-  "lora_dropout": 0.05,
-  "use_qlora": true   // Set to true for 4-bit quantization (Linux/WSL only)
-}
-```
-
-### Check Training Status
-**Endpoint:** `GET /train-status/{job_id}`
-
-Checks the progress of a running training job.
-
-**Response:**
-```json
-{
-  "status": "running",
-  "progress": 45,
-  "message": "Training...",
-  "error": null,
-  "steps": 100,
-  "epoch": 0
-}
-```
+---
 
 ## 🧪 Development & Testing
 
-### Running Tests Locally
-To run the test suite, you need to install the development dependencies:
+This project adheres explicitly to **Senior Python Developer Guidelines** featuring `pytest`, mock patching, `pytest-cov`, and `pytest-asyncio` strictly executing in a sandboxed `venv`.
 
+1. **Activate Environment and Install dependencies:**
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-pip install pytest httpx
+pip install -r requirements-dev.txt
 ```
 
-Then run the tests:
-
+2. **Run the complete testing suite (Target: 90%+ Coverage):**
 ```bash
-pytest tests/
+pytest tests/ -v -p no:warnings --cov=.
 ```
 
 ## License
