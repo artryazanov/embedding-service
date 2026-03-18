@@ -73,14 +73,14 @@ class EmbeddingEngine:
     async def encode_async(
         self, texts: List[str], batch_size: int = 32
     ) -> List[List[float]]:
-        """Асинхронная обертка для быстрых/единичных запросов."""
+        """Asynchronous wrapper for fast/single requests."""
         async with self._lock:
             return await asyncio.to_thread(self.encode, texts, batch_size)
 
     async def encode_batch_chunked_async(
         self, texts: List[str], chunk_size: int = 64
     ) -> List[List[float]]:
-        """Разбивает массивный батч на чанки, не блокируя event loop."""
+        """Splits a massive batch into chunks without blocking the event loop."""
         results = []
         for i in range(0, len(texts), chunk_size):
             chunk = texts[i : i + chunk_size]
@@ -90,7 +90,7 @@ class EmbeddingEngine:
                 )
             results.extend(chunk_result)
 
-            # Важно: отдаем управление циклу событий.
+            # Important: yield control back to the event loop.
             await asyncio.sleep(0.001)
 
         return results
