@@ -1,6 +1,6 @@
+import asyncio
 import logging
 import os
-import asyncio
 from typing import List, Optional
 
 import torch
