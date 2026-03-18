@@ -130,7 +130,8 @@ async def test_worker_connection_closed(mock_settings, mock_engine):
 
     with (
         patch(
-            "websockets.connect", side_effect=[MockWebsocketClosed([]), Exception("Stop loop!")]
+            "websockets.connect",
+            side_effect=[MockWebsocketClosed([]), Exception("Stop loop!")],
         ) as mock_connect,
         patch("worker.asyncio.sleep", AsyncMock(side_effect=asyncio.CancelledError)),
         patch("worker.logger.warning") as mock_warn,
