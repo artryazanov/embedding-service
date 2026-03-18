@@ -130,7 +130,9 @@ class EmbeddingEngine:
         future = loop.create_future()
 
         await self.queue.put(
-            PrioritizedTask(priority=1, timestamp=time.time(), texts=texts, future=future)
+            PrioritizedTask(
+                priority=1, timestamp=time.time(), texts=texts, future=future
+            )
         )
         return await future
 
@@ -146,7 +148,9 @@ class EmbeddingEngine:
             future = loop.create_future()
 
             await self.queue.put(
-                PrioritizedTask(priority=2, timestamp=time.time(), texts=chunk, future=future)
+                PrioritizedTask(
+                    priority=2, timestamp=time.time(), texts=chunk, future=future
+                )
             )
 
             chunk_result = await future
