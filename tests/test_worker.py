@@ -2,6 +2,8 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
+from websockets.exceptions import ConnectionClosed
+
 import pytest
 
 from worker import websocket_worker_task
@@ -119,9 +121,6 @@ async def test_worker_batch_process(mock_settings, mock_engine):
         )
 
 
-from websockets.exceptions import ConnectionClosed
-
-
 @pytest.mark.asyncio
 async def test_worker_connection_closed(mock_settings, mock_engine):
     class MockWebsocketClosed(MockWebsocket):
@@ -132,7 +131,7 @@ async def test_worker_connection_closed(mock_settings, mock_engine):
         patch(
             "websockets.connect",
             side_effect=[MockWebsocketClosed([]), Exception("Stop loop!")],
-        ) as mock_connect,
+        ),
         patch("worker.asyncio.sleep", AsyncMock(side_effect=asyncio.CancelledError)),
         patch("worker.logger.warning") as mock_warn,
     ):

@@ -80,7 +80,7 @@ class EmbeddingEngine:
     async def encode_batch_chunked_async(
         self, texts: List[str], chunk_size: int = 64
     ) -> List[List[float]]:
-        """Разбивает массивный батч на чанки, позволяя event loop'у обрабатывать другие запросы."""
+        """Разбивает массивный батч на чанки, не блокируя event loop."""
         results = []
         for i in range(0, len(texts), chunk_size):
             chunk = texts[i : i + chunk_size]
