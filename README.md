@@ -13,7 +13,7 @@ This is a high-performance, FastAPI-based microservice and WebSocket worker dedi
 
 ## 🔥 Core Features
 - **Pydantic Driven**: Centralized and type-safe `.env` parsing via `pydantic-settings`.
-- **Dedicated Engine**: Refactored OOP `EmbeddingEngine` tailored specifically for extracting embeddings safely and closing memory leaks reliably. It features a background GPU worker utilizing a `PriorityQueue`, which granularly processes smaller chunked portions of massive batches (low priority) while immediately preempting them to fulfill incoming single vectorization requests (high priority) with zero latency.
+- **Dedicated Engine**: Refactored OOP `EmbeddingEngine` tailored specifically for extracting embeddings safely and closing memory leaks reliably. It utilizes `asyncio.to_thread` with granular chunking to ensure massive batched vectorization requests never block the main event loop, allowing single requests to run simultaneously.
 - **Robust WebSocket Worker**: A resilient background task connecting to Reverb (`pusher_websocket`) possessing an exponential backoff retry mechanism to guarantee persistent connections under network stress.
 - **FastAPI Core**: A high-performance REST API managed by advanced application `lifespan` generators.
 - **Smart Hardware Detection**: Automatically targets `cuda` if available and safely falls back to `cpu`. 
@@ -102,7 +102,7 @@ curl -X POST "http://localhost:8000/vectorize" \
 ```
 
 ### Generate Batch Embeddings (`POST /vectorize-batch`)
-Compute multiple vectors highly optimally in a single pass. The engine explicitly breaks down massive payloads into smaller sub-batches (chunks of 64 requests by default) and feeds them into a `PriorityQueue` with a lower priority (`priority=2`). This architectural feature prevents GPU OOM errors and guarantees that isolated, single requests (which are assigned high priority, `priority=1`) will immediately bypass the queue and be processed by the GPU worker the very moment the current 64-item chunk finishes, rather than waiting for an entire 30+ second batch to complete.
+Compute multiple vectors highly optimally in a single pass. The engine explicitly breaks down massive payloads into smaller sub-batches (chunks of 64 requests) yielding to the asynchronous event loop (`asyncio.sleep(0.001)`) between them. This architectural feature prevents GPU OOM errors and guarantees that isolated, single priority requests won't queue and timeout behind long 30+ second batches.
 ```bash
 curl -X POST "http://localhost:8000/vectorize-batch" \
      -H "Content-Type: application/json" \

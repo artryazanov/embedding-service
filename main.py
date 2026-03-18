@@ -47,12 +47,10 @@ class BatchVectorResponse(BaseModel):
 async def lifespan(app: FastAPI):
     # Startup
     engine.load()
-    engine.start_queue_worker()
     ws_task = asyncio.create_task(websocket_worker_task())
     yield
     # Shutdown
     ws_task.cancel()
-    await engine.stop_queue_worker()
     try:
         await ws_task
     except asyncio.CancelledError:

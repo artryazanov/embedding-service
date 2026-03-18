@@ -97,12 +97,9 @@ async def test_engine_encode_async_success(mock_settings):
     # Mock synchronous method
     engine.encode = MagicMock(return_value=[[0.1, 0.2, 0.3]])
 
-    engine.start_queue_worker()
     result = await engine.encode_async(["test text_async"], batch_size=32)
-    await engine.stop_queue_worker()
-
     assert result == [[0.1, 0.2, 0.3]]
-    engine.encode.assert_called_once_with(["test text_async"], batch_size=1)
+    engine.encode.assert_called_once_with(["test text_async"], 32)
 
 
 @pytest.mark.asyncio
@@ -113,10 +110,8 @@ async def test_engine_encode_batch_chunked_async_success(mock_settings):
     # Each chunk call returns a list of vectors
     engine.encode = MagicMock(side_effect=[[[0.1]], [[0.2]]])
 
-    engine.start_queue_worker()
     # We do a batch of 2 elements, chunk size 1
     result = await engine.encode_batch_chunked_async(["a", "b"], chunk_size=1)
-    await engine.stop_queue_worker()
 
     assert result == [[0.1], [0.2]]
     assert engine.encode.call_count == 2
