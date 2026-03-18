@@ -70,23 +70,29 @@ class EmbeddingEngine:
         )
         return embeddings.tolist()
 
-    async def encode_async(self, texts: List[str], batch_size: int = 32) -> List[List[float]]:
+    async def encode_async(
+        self, texts: List[str], batch_size: int = 32
+    ) -> List[List[float]]:
         """Асинхронная обертка для быстрых/единичных запросов."""
         async with self._lock:
             return await asyncio.to_thread(self.encode, texts, batch_size)
 
-    async def encode_batch_chunked_async(self, texts: List[str], chunk_size: int = 64) -> List[List[float]]:
+    async def encode_batch_chunked_async(
+        self, texts: List[str], chunk_size: int = 64
+    ) -> List[List[float]]:
         """Разбивает массивный батч на чанки, позволяя event loop'у обрабатывать другие запросы."""
         results = []
         for i in range(0, len(texts), chunk_size):
-            chunk = texts[i:i + chunk_size]
+            chunk = texts[i : i + chunk_size]
             async with self._lock:
-                chunk_result = await asyncio.to_thread(self.encode, chunk, batch_size=chunk_size)
+                chunk_result = await asyncio.to_thread(
+                    self.encode, chunk, batch_size=chunk_size
+                )
             results.extend(chunk_result)
-            
-            # Важно: отдаем управление циклу событий. 
+
+            # Важно: отдаем управление циклу событий.
             await asyncio.sleep(0.001)
-            
+
         return results
 
 

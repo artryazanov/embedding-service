@@ -25,7 +25,11 @@ def test_health_unloaded(client):
 def test_vectorize_success(client):
     # Manually ensure it's loaded
     engine.model = True  # Dummy truthy value to pass "is None" check
-    with patch("main.engine.encode_async", new_callable=AsyncMock, return_value=[[0.1, 0.2, 0.3]]) as mock_encode:
+    with patch(
+        "main.engine.encode_async",
+        new_callable=AsyncMock,
+        return_value=[[0.1, 0.2, 0.3]],
+    ) as mock_encode:
         response = client.post("/vectorize", json={"text": "hello world"})
 
         assert response.status_code == 200
@@ -48,7 +52,9 @@ def test_vectorize_batch_success(client):
     engine.model = True
 
     with patch(
-        "main.engine.encode_batch_chunked_async", new_callable=AsyncMock, return_value=[[0.1, 0.1], [0.2, 0.2]]
+        "main.engine.encode_batch_chunked_async",
+        new_callable=AsyncMock,
+        return_value=[[0.1, 0.1], [0.2, 0.2]],
     ) as mock_encode:
         response = client.post("/vectorize-batch", json={"items": ["text1", "text2"]})
         assert response.status_code == 200
@@ -79,7 +85,11 @@ def test_verify_token(client):
 
 def test_vectorize_exception(client):
     engine.model = True
-    with patch("main.engine.encode_async", new_callable=AsyncMock, side_effect=Exception("Inference error")):
+    with patch(
+        "main.engine.encode_async",
+        new_callable=AsyncMock,
+        side_effect=Exception("Inference error"),
+    ):
         response = client.post("/vectorize", json={"text": "error string"})
         assert response.status_code == 500
         assert response.json()["detail"] == "Inference error"
@@ -94,7 +104,11 @@ def test_vectorize_batch_model_unloaded(client):
 
 def test_vectorize_batch_exception(client):
     engine.model = True
-    with patch("main.engine.encode_batch_chunked_async", new_callable=AsyncMock, side_effect=Exception("Batch inference error")):
+    with patch(
+        "main.engine.encode_batch_chunked_async",
+        new_callable=AsyncMock,
+        side_effect=Exception("Batch inference error"),
+    ):
         response = client.post("/vectorize-batch", json={"items": ["text"]})
         assert response.status_code == 500
         assert response.json()["detail"] == "Batch inference error"

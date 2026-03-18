@@ -114,10 +114,13 @@ async def test_worker_batch_process(mock_settings, mock_engine):
             pass
 
         mock_connect.assert_called_once()
-        mock_engine.encode_batch_chunked_async.assert_called_once_with(["t1", "t2"], chunk_size=64)
+        mock_engine.encode_batch_chunked_async.assert_called_once_with(
+            ["t1", "t2"], chunk_size=64
+        )
 
 
 from websockets.exceptions import ConnectionClosed
+
 
 @pytest.mark.asyncio
 async def test_worker_connection_closed(mock_settings, mock_engine):
@@ -126,7 +129,9 @@ async def test_worker_connection_closed(mock_settings, mock_engine):
             raise ConnectionClosed(None, None)
 
     with (
-        patch("websockets.connect", return_value=MockWebsocketClosed([])) as mock_connect,
+        patch(
+            "websockets.connect", return_value=MockWebsocketClosed([])
+        ) as mock_connect,
         patch("worker.asyncio.sleep", AsyncMock(side_effect=asyncio.CancelledError)),
         patch("worker.logger.warning") as mock_warn,
     ):
@@ -172,4 +177,6 @@ async def test_worker_outer_exception(mock_settings, mock_engine):
             await websocket_worker_task()
         except asyncio.CancelledError:
             pass
-        mock_error.assert_any_call("WebSocket failure: Outer error. Retrying in 1.0 seconds...")
+        mock_error.assert_any_call(
+            "WebSocket failure: Outer error. Retrying in 1.0 seconds..."
+        )

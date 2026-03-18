@@ -93,7 +93,9 @@ async def websocket_worker_task():
                                         payload.get("items", []), chunk_size=64
                                     )
                                 else:
-                                    vectors = await engine.encode_async([payload.get("text", "")])
+                                    vectors = await engine.encode_async(
+                                        [payload.get("text", "")]
+                                    )
                                     result = vectors[0]
 
                                 await websocket.send(
