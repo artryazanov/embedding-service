@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import os
+import time
+import dataclasses
 from typing import List, Optional
 
 import torch
@@ -11,11 +13,61 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
+@dataclasses.dataclass(order=True)
+class PrioritizedTask:
+    priority: int
+    timestamp: float
+    texts: List[str] = dataclasses.field(compare=False)
+    future: asyncio.Future = dataclasses.field(compare=False)
+
+
 class EmbeddingEngine:
     def __init__(self):
         self.model: Optional[SentenceTransformer] = None
         self._set_device()
-        self._lock = asyncio.Lock()
+        self.queue: Optional[asyncio.PriorityQueue] = None
+        self.worker_task: Optional[asyncio.Task] = None
+
+    def start_queue_worker(self):
+        """Starts the background worker for processing the GPU inference queue."""
+        if self.queue is None:
+            self.queue = asyncio.PriorityQueue()
+        self.worker_task = asyncio.create_task(self._process_queue())
+
+    async def stop_queue_worker(self):
+        """Stops the background worker when the application shuts down."""
+        if self.worker_task:
+            self.worker_task.cancel()
+            try:
+                await self.worker_task
+            except asyncio.CancelledError:
+                pass
+            self.worker_task = None
+            self.queue = None
+
+    async def _process_queue(self):
+        """A background loop that retrieves chunks one by one based on priority."""
+        while True:
+            try:
+                task: PrioritizedTask = await self.queue.get()
+
+                try:
+                    if self.model is None:
+                        raise RuntimeError("Model is not initialized")
+
+                    result = await asyncio.to_thread(
+                        self.encode, task.texts, batch_size=len(task.texts)
+                    )
+                    task.future.set_result(result)
+                except Exception as e:
+                    task.future.set_exception(e)
+                finally:
+                    self.queue.task_done()
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Queue worker error: {e}")
 
     def _set_device(self):
         if settings.device == "auto":
@@ -74,8 +126,13 @@ class EmbeddingEngine:
         self, texts: List[str], batch_size: int = 32
     ) -> List[List[float]]:
         """Asynchronous wrapper for fast/single requests."""
-        async with self._lock:
-            return await asyncio.to_thread(self.encode, texts, batch_size)
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+
+        await self.queue.put(
+            PrioritizedTask(priority=1, timestamp=time.time(), texts=texts, future=future)
+        )
+        return await future
 
     async def encode_batch_chunked_async(
         self, texts: List[str], chunk_size: int = 64
@@ -84,14 +141,16 @@ class EmbeddingEngine:
         results = []
         for i in range(0, len(texts), chunk_size):
             chunk = texts[i : i + chunk_size]
-            async with self._lock:
-                chunk_result = await asyncio.to_thread(
-                    self.encode, chunk, batch_size=chunk_size
-                )
-            results.extend(chunk_result)
 
-            # Important: yield control back to the event loop.
-            await asyncio.sleep(0.001)
+            loop = asyncio.get_running_loop()
+            future = loop.create_future()
+
+            await self.queue.put(
+                PrioritizedTask(priority=2, timestamp=time.time(), texts=chunk, future=future)
+            )
+
+            chunk_result = await future
+            results.extend(chunk_result)
 
         return results
 
