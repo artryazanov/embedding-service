@@ -92,7 +92,7 @@ async def vectorize_batch(req: BatchTextRequest):
     if engine.model is None:
         raise HTTPException(status_code=503, detail="Model is initializing.")
     try:
-        vectors = await engine.encode_batch_chunked_async(req.items, chunk_size=64)
+        vectors = await engine.encode_batch_chunked_async(req.items, chunk_size=8)
         return {"vectors": vectors}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
