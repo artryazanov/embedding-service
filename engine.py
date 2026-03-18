@@ -129,6 +129,7 @@ class EmbeddingEngine:
         loop = asyncio.get_running_loop()
         future = loop.create_future()
 
+        assert self.queue is not None, "Queue is not initialized. Call start_queue_worker() first."
         await self.queue.put(
             PrioritizedTask(
                 priority=1, timestamp=time.time(), texts=texts, future=future
@@ -147,6 +148,7 @@ class EmbeddingEngine:
             loop = asyncio.get_running_loop()
             future = loop.create_future()
 
+            assert self.queue is not None, "Queue is not initialized. Call start_queue_worker() first."
             await self.queue.put(
                 PrioritizedTask(
                     priority=2, timestamp=time.time(), texts=chunk, future=future
