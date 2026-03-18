@@ -21,7 +21,8 @@ def mock_settings():
 def mock_engine():
     with patch("worker.engine") as mock:
         mock.is_gpu = False
-        mock.encode.return_value = [[0.1, 0.2, 0.3]]
+        mock.encode_async = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+        mock.encode_batch_chunked_async = AsyncMock(return_value=[[0.1], [0.2]])
         yield mock
 
 
@@ -84,12 +85,12 @@ async def test_worker_connects_and_processes(mock_settings, mock_engine):
             pass
 
         mock_connect.assert_called_once()
-        mock_engine.encode.assert_called_once_with(["test"])
+        mock_engine.encode_async.assert_called_once_with(["test"])
 
 
 @pytest.mark.asyncio
 async def test_worker_batch_process(mock_settings, mock_engine):
-    mock_engine.encode.return_value = [[0.1], [0.2]]
+    mock_engine.encode_batch_chunked_async.return_value = [[0.1], [0.2]]
 
     messages = [
         json.dumps(
@@ -113,4 +114,62 @@ async def test_worker_batch_process(mock_settings, mock_engine):
             pass
 
         mock_connect.assert_called_once()
-        mock_engine.encode.assert_called_once_with(["t1", "t2"], batch_size=64)
+        mock_engine.encode_batch_chunked_async.assert_called_once_with(["t1", "t2"], chunk_size=64)
+
+
+from websockets.exceptions import ConnectionClosed
+
+@pytest.mark.asyncio
+async def test_worker_connection_closed(mock_settings, mock_engine):
+    class MockWebsocketClosed(MockWebsocket):
+        async def __anext__(self):
+            raise ConnectionClosed(None, None)
+
+    with (
+        patch("websockets.connect", return_value=MockWebsocketClosed([])) as mock_connect,
+        patch("worker.asyncio.sleep", AsyncMock(side_effect=asyncio.CancelledError)),
+        patch("worker.logger.warning") as mock_warn,
+    ):
+        try:
+            await websocket_worker_task()
+        except asyncio.CancelledError:
+            pass
+        mock_warn.assert_any_call("Connection closed by server.")
+
+
+@pytest.mark.asyncio
+async def test_worker_inference_error(mock_settings, mock_engine):
+    messages = [
+        json.dumps(
+            {
+                "event": "VectorizeTaskEvent",
+                "data": {"requestId": "req-123", "text": "test_error"},
+            }
+        )
+    ]
+    mock_engine.encode_async.side_effect = Exception("Inference failed")
+
+    with (
+        patch("websockets.connect", return_value=MockWebsocket(messages)),
+        patch("worker.asyncio.sleep", AsyncMock(side_effect=asyncio.CancelledError)),
+        patch("worker.logger.error") as mock_error,
+    ):
+        try:
+            await websocket_worker_task()
+        except asyncio.CancelledError:
+            pass
+        mock_error.assert_any_call("Inference task execution error: Inference failed")
+
+
+@pytest.mark.asyncio
+async def test_worker_outer_exception(mock_settings, mock_engine):
+    with (
+        patch("websockets.connect", side_effect=Exception("Outer error")),
+        patch("worker.asyncio.sleep", AsyncMock(side_effect=asyncio.CancelledError)),
+        patch("worker.logger.error") as mock_error,
+    ):
+        try:
+            await websocket_worker_task()
+        except asyncio.CancelledError:
+            pass
+        mock_error.assert_any_call("WebSocket failure: Outer error. Retrying in 1.0 seconds...")

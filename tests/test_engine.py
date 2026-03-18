@@ -88,3 +88,57 @@ def test_engine_encode_unloaded():
     with pytest.raises(RuntimeError) as exc_info:
         engine.encode(["test text"])
     assert "Model is not initialized" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_engine_encode_async_success(mock_settings):
+    engine = EmbeddingEngine()
+    engine.model = MagicMock()
+    # Mock synchronous method
+    engine.encode = MagicMock(return_value=[[0.1, 0.2, 0.3]])
+
+    result = await engine.encode_async(["test text_async"], batch_size=32)
+    assert result == [[0.1, 0.2, 0.3]]
+    engine.encode.assert_called_once_with(["test text_async"], 32)
+
+
+@pytest.mark.asyncio
+async def test_engine_encode_batch_chunked_async_success(mock_settings):
+    engine = EmbeddingEngine()
+    engine.model = MagicMock()
+    
+    # Each chunk call returns a list of vectors
+    engine.encode = MagicMock(side_effect=[
+        [[0.1]], [[0.2]]
+    ])
+
+    # We do a batch of 2 elements, chunk size 1
+    result = await engine.encode_batch_chunked_async(["a", "b"], chunk_size=1)
+    
+    assert result == [[0.1], [0.2]]
+    assert engine.encode.call_count == 2
+    engine.encode.assert_any_call(["a"], batch_size=1)
+    engine.encode.assert_any_call(["b"], batch_size=1)
+
+
+def test_engine_load_saves_locally(mock_settings):
+    # Cover the condition where load_source == settings.model_name
+    engine = EmbeddingEngine()
+    with (
+        patch("engine.SentenceTransformer") as MockST,
+        patch("os.path.exists", return_value=False),
+        patch("os.makedirs") as mock_makedirs,
+    ):
+        mock_model = MagicMock()
+        MockST.return_value = mock_model
+        engine.load()
+        
+        mock_makedirs.assert_called_once_with("./models", exist_ok=True)
+        mock_model.save.assert_called_once_with("./models/BAAI_bge-m3")
+
+
+def test_engine_load_exception(mock_settings):
+    engine = EmbeddingEngine()
+    with patch("engine.SentenceTransformer", side_effect=Exception("Test error")):
+        with pytest.raises(Exception, match="Test error"):
+            engine.load()
