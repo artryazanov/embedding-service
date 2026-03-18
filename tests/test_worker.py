@@ -2,9 +2,8 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
-from websockets.exceptions import ConnectionClosed
-
 import pytest
+from websockets.exceptions import ConnectionClosed
 
 from worker import websocket_worker_task
 
