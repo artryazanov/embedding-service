@@ -15,7 +15,11 @@ class EmbeddingEngine:
     def __init__(self):
         self.model: Optional[SentenceTransformer] = None
         self._set_device()
-        self._lock = asyncio.Lock()
+        
+        # Lock ONLY for batches.
+        # It is needed to prevent two massive batches from running simultaneously
+        # and crashing the server due to Out Of Memory (OOM).
+        self._batch_lock = asyncio.Lock()
 
     def _set_device(self):
         if settings.device == "auto":
@@ -37,7 +41,6 @@ class EmbeddingEngine:
             logger.info(f"Loading model {load_source} on {self.device}...")
             self.model = SentenceTransformer(load_source, device=self.device)
 
-            # Save locally if downloaded from hub
             if load_source == settings.model_name:
                 os.makedirs("./models", exist_ok=True)
                 self.model.save(local_path)
@@ -64,7 +67,6 @@ class EmbeddingEngine:
         if self.model is None:
             raise RuntimeError("Model is not initialized")
 
-        # BGE-M3 doesn't require prefixes for base vectorization
         embeddings = self.model.encode(
             texts, batch_size=batch_size, convert_to_numpy=True
         )
@@ -73,26 +75,27 @@ class EmbeddingEngine:
     async def encode_async(
         self, texts: List[str], batch_size: int = 32
     ) -> List[List[float]]:
-        """Asynchronous wrapper for fast/single requests."""
-        async with self._lock:
-            return await asyncio.to_thread(self.encode, texts, batch_size)
+        """Single queries are processed WITHOUT locking (in parallel with batches)"""
+        return await asyncio.to_thread(self.encode, texts, batch_size)
 
     async def encode_batch_chunked_async(
         self, texts: List[str], chunk_size: Optional[int] = None
     ) -> List[List[float]]:
-        """Splits a massive batch into chunks without blocking the event loop."""
+        """Batches are processed strictly sequentially to prevent RAM overload"""
         chunk_size = chunk_size or settings.chunk_size
         results = []
-        for i in range(0, len(texts), chunk_size):
-            chunk = texts[i : i + chunk_size]
-            async with self._lock:
+        
+        # Acquire the lock so batches don't overlap
+        async with self._batch_lock:
+            for i in range(0, len(texts), chunk_size):
+                chunk = texts[i : i + chunk_size]
                 chunk_result = await asyncio.to_thread(
                     self.encode, chunk, batch_size=chunk_size
                 )
-            results.extend(chunk_result)
+                results.extend(chunk_result)
 
-            # Important: yield control back to the event loop.
-            await asyncio.sleep(0.001)
+                # Yield control to the asyncio event loop
+                await asyncio.sleep(0.001)
 
         return results
 

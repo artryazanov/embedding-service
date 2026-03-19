@@ -115,9 +115,7 @@ async def test_worker_batch_process(mock_settings, mock_engine):
             pass
 
         mock_connect.assert_called_once()
-        mock_engine.encode_batch_chunked_async.assert_called_once_with(
-            ["t1", "t2"]
-        )
+        mock_engine.encode_batch_chunked_async.assert_called_once_with(["t1", "t2"])
 
 
 @pytest.mark.asyncio
