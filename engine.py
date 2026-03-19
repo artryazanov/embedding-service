@@ -78,9 +78,10 @@ class EmbeddingEngine:
             return await asyncio.to_thread(self.encode, texts, batch_size)
 
     async def encode_batch_chunked_async(
-        self, texts: List[str], chunk_size: int = 8
+        self, texts: List[str], chunk_size: Optional[int] = None
     ) -> List[List[float]]:
         """Splits a massive batch into chunks without blocking the event loop."""
+        chunk_size = chunk_size or settings.chunk_size
         results = []
         for i in range(0, len(texts), chunk_size):
             chunk = texts[i : i + chunk_size]

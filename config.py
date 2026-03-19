@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     api_token: Optional[str] = None
     model_name: str = "BAAI/bge-m3"
     max_seq_length: int = 8192
+    chunk_size: int = 64
 
     # Device: auto, cpu, cuda
     device: Literal["auto", "cpu", "cuda"] = "auto"

@@ -116,7 +116,7 @@ async def test_worker_batch_process(mock_settings, mock_engine):
 
         mock_connect.assert_called_once()
         mock_engine.encode_batch_chunked_async.assert_called_once_with(
-            ["t1", "t2"], chunk_size=8
+            ["t1", "t2"]
         )
 
 

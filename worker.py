@@ -90,7 +90,7 @@ async def websocket_worker_task():
                             try:
                                 if "BatchVectorizeTaskEvent" in event:
                                     result = await engine.encode_batch_chunked_async(
-                                        payload.get("items", []), chunk_size=8
+                                        payload.get("items", [])
                                     )
                                 else:
                                     vectors = await engine.encode_async(

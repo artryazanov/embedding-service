@@ -33,6 +33,7 @@ cp .env.example .env
 | `API_TOKEN` | Optional Bearer token for secure REST endpoints. | `None` |
 | `MODEL_NAME` | The HuggingFace model path or local repository name. | `BAAI/bge-m3` |
 | `MAX_SEQ_LENGTH` | Maximum tokens per sequence. | `8192` |
+| `CHUNK_SIZE` | Batch processing chunk size (elements per single GPU array). | `64` |
 | `DEVICE` | Target hardware. (`auto`, `cpu`, or `cuda`) | `auto` |
 | `REVERB_APP_KEY` | Reverb integration key for the WebSocket worker. | `None` |
 | `REVERB_HOST` | Host address of the Reverb instance. | `reverb` |
@@ -102,7 +103,7 @@ curl -X POST "http://localhost:8000/vectorize" \
 ```
 
 ### Generate Batch Embeddings (`POST /vectorize-batch`)
-Compute multiple vectors highly optimally in a single pass. The engine explicitly breaks down massive payloads into smaller sub-batches (chunks of 8 requests) yielding to the asynchronous event loop (`asyncio.sleep(0.001)`) between them. This architectural feature prevents GPU OOM errors and guarantees that isolated, single priority requests won't queue and timeout behind long 30+ second batches.
+Compute multiple vectors highly optimally in a single pass. The engine explicitly breaks down massive payloads into smaller sub-batches (chunks of `CHUNK_SIZE` requests, 64 by default) yielding to the asynchronous event loop (`asyncio.sleep(0.001)`) between them. This architectural feature prevents GPU OOM errors and guarantees that isolated, single priority requests won't queue and timeout behind long 30+ second batches.
 ```bash
 curl -X POST "http://localhost:8000/vectorize-batch" \
      -H "Content-Type: application/json" \

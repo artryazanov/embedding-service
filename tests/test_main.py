@@ -62,7 +62,7 @@ def test_vectorize_batch_success(client):
         assert "vectors" in data
         assert len(data["vectors"]) == 2
         assert data["vectors"][0] == [0.1, 0.1]
-        mock_encode.assert_called_once_with(["text1", "text2"], chunk_size=8)
+        mock_encode.assert_called_once_with(["text1", "text2"])
 
 
 def test_verify_token(client):
