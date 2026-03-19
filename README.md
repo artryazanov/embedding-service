@@ -1,6 +1,6 @@
 # BGE-M3 Embedding Service
 
-This is a high-performance, FastAPI-based microservice and WebSocket worker dedicated to generating text embeddings using the state-of-the-art **`BAAI/bge-m3`** model. Designed for international scalability, the architecture features a strictly validated configuration system, an intelligent exponential backoff WebSocket client for external integrations, and seamless CPU/GPU Docker deployments.
+This is a high-performance, FastAPI-based microservice dedicated to generating text embeddings using the state-of-the-art **`BAAI/bge-m3`** model. Designed for international scalability, the architecture features a strictly validated configuration system and seamless CPU/GPU Docker deployments.
 
 [![Tests](https://github.com/artryazanov/embedding-service/actions/workflows/tests.yml/badge.svg)](https://github.com/artryazanov/embedding-service/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/gh/artryazanov/embedding-service/graph/badge.svg)](https://codecov.io/gh/artryazanov/embedding-service)
@@ -14,7 +14,6 @@ This is a high-performance, FastAPI-based microservice and WebSocket worker dedi
 ## 🔥 Core Features
 - **Pydantic Driven**: Centralized and type-safe `.env` parsing via `pydantic-settings`.
 - **Dedicated Engine**: Refactored OOP `EmbeddingEngine` tailored specifically for extracting embeddings safely and closing memory leaks reliably. It utilizes `asyncio.to_thread` with granular chunking to ensure massive batched vectorization requests never block the main event loop, allowing single requests to run simultaneously.
-- **Robust WebSocket Worker**: A resilient background task connecting to Reverb (`pusher_websocket`) possessing an exponential backoff retry mechanism to guarantee persistent connections under network stress.
 - **FastAPI Core**: A high-performance REST API managed by advanced application `lifespan` generators.
 - **Smart Hardware Detection**: Automatically targets `cuda` if available and safely falls back to `cpu`. 
 - **Modular Dockerfile**: A single Dockerfile handles both CPU and GPU builds natively via `ARG DEVICE`.
@@ -35,10 +34,6 @@ cp .env.example .env
 | `MAX_SEQ_LENGTH` | Maximum tokens per sequence. | `8192` |
 | `CHUNK_SIZE` | Batch processing chunk size (elements per single GPU array). | `64` |
 | `DEVICE` | Target hardware. (`auto`, `cpu`, or `cuda`) | `auto` |
-| `REVERB_APP_KEY` | Reverb integration key for the WebSocket worker. | `None` |
-| `REVERB_HOST` | Host address of the Reverb instance. | `reverb` |
-| `REVERB_PORT` | Port of the Reverb instance. | `8080` |
-| `REVERB_SCHEME` | WebSocket connection layer (`http` maps to `ws`, `https` mappings to `wss`). | `http` |
 
 ---
 

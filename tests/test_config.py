@@ -9,22 +9,18 @@ def test_default_config():
     assert settings.model_name == "BAAI/bge-m3"
     assert settings.device == "auto"
     assert settings.max_seq_length == 8192
-    assert settings.reverb_scheme == "http"
-    assert settings.reverb_port == 8080
 
 
 def test_override_config(monkeypatch):
     monkeypatch.setenv("model_name", "custom/model")
     monkeypatch.setenv("device", "cpu")
     monkeypatch.setenv("api_token", "supersecret123")
-    monkeypatch.setenv("reverb_scheme", "https")
 
     settings = Settings()
 
     assert settings.model_name == "custom/model"
     assert settings.device == "cpu"
     assert settings.api_token == "supersecret123"
-    assert settings.reverb_scheme == "https"
 
 
 def test_invalid_device_raises_error(monkeypatch):

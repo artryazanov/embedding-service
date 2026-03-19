@@ -8,7 +8,6 @@ from pydantic import BaseModel
 
 from config import settings
 from engine import engine
-from worker import websocket_worker_task
 
 security = HTTPBearer(auto_error=False)
 
@@ -47,14 +46,8 @@ class BatchVectorResponse(BaseModel):
 async def lifespan(app: FastAPI):
     # Startup
     engine.load()
-    ws_task = asyncio.create_task(websocket_worker_task())
     yield
     # Shutdown
-    ws_task.cancel()
-    try:
-        await ws_task
-    except asyncio.CancelledError:
-        pass
     engine.unload()
 
 
