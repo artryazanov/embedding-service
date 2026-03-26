@@ -107,14 +107,16 @@ async def vectorize_batch(req: BatchTextRequest):
         elif isinstance(req.items, list):
             if isinstance(req.items[0], str):
                 # Legacy List[str] format
-                vectors = await engine.encode_batch_chunked_async(req.items) # type: ignore
+                vectors = await engine.encode_batch_chunked_async(req.items)  # type: ignore
                 return {"vectors": vectors}
             else:
                 # List[ItemRequest] format
-                keys = [item.id for item in req.items] # type: ignore
-                texts = [item.text for item in req.items] # type: ignore
+                keys = [item.id for item in req.items]  # type: ignore
+                texts = [item.text for item in req.items]  # type: ignore
                 vectors = await engine.encode_batch_chunked_async(texts)
-                return {"vectors": [{"id": k, "vector": v} for k, v in zip(keys, vectors)]}
+                return {
+                    "vectors": [{"id": k, "vector": v} for k, v in zip(keys, vectors)]
+                }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
