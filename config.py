@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # Device: auto, cpu, cuda
     device: Literal["auto", "cpu", "cuda"] = "auto"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()

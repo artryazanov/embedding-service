@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -29,16 +29,26 @@ class TextRequest(BaseModel):
     text: str
 
 
-class BatchTextRequest(BaseModel):
-    items: List[str]
-
-
 class VectorResponse(BaseModel):
     vector: List[float]
 
 
+class ItemRequest(BaseModel):
+    id: Union[str, int]
+    text: str
+
+
+class ItemResponse(BaseModel):
+    id: Union[str, int]
+    vector: List[float]
+
+
+class BatchTextRequest(BaseModel):
+    items: Union[Dict[str, str], List[ItemRequest], List[str]]
+
+
 class BatchVectorResponse(BaseModel):
-    vectors: List[List[float]]
+    vectors: Union[Dict[str, List[float]], List[ItemResponse], List[List[float]]]
 
 
 @asynccontextmanager
@@ -84,7 +94,27 @@ async def vectorize_batch(req: BatchTextRequest):
     if engine.model is None:
         raise HTTPException(status_code=503, detail="Model is initializing.")
     try:
-        vectors = await engine.encode_batch_chunked_async(req.items)
-        return {"vectors": vectors}
+        if not req.items:
+            return {"vectors": []}
+
+        if isinstance(req.items, dict):
+            # Dict[str, str] format mapping ID -> text
+            keys = list(req.items.keys())
+            texts = list(req.items.values())
+            vectors = await engine.encode_batch_chunked_async(texts)
+            return {"vectors": {k: v for k, v in zip(keys, vectors)}}
+
+        elif isinstance(req.items, list):
+            if isinstance(req.items[0], str):
+                # Legacy List[str] format
+                vectors = await engine.encode_batch_chunked_async(req.items) # type: ignore
+                return {"vectors": vectors}
+            else:
+                # List[ItemRequest] format
+                keys = [item.id for item in req.items] # type: ignore
+                texts = [item.text for item in req.items] # type: ignore
+                vectors = await engine.encode_batch_chunked_async(texts)
+                return {"vectors": [{"id": k, "vector": v} for k, v in zip(keys, vectors)]}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -99,18 +99,25 @@ curl -X POST "http://localhost:8000/vectorize" \
 
 ### Generate Batch Embeddings (`POST /vectorize-batch`)
 Compute multiple vectors highly optimally in a single pass. The engine explicitly breaks down massive payloads into smaller sub-batches (chunks of `CHUNK_SIZE` requests, 64 by default) yielding to the asynchronous event loop (`asyncio.sleep(0.001)`) between them. This architectural feature prevents GPU OOM errors and guarantees that isolated, single priority requests won't queue and timeout behind long 30+ second batches.
+
+The endpoint uniquely supports three flexible payload formats for `items`:
+1. **Dictionary Format (Recommended):** Perfect for product indexing. Pass a JSON object mapping unique IDs to texts. The vectors are instantly mapped strictly back to those specific IDs.
+2. **Object Array Format:** Pass a standard array of objects: `[{"id": "...", "text": "..."}]`.
+3. **Legacy Format:** A standard list of plain strings. 
+
+**Example Request (Dictionary Format):**
 ```bash
 curl -X POST "http://localhost:8000/vectorize-batch" \
      -H "Content-Type: application/json" \
-     -d '{"items": ["First document segment.", "Second document segment."]}'
+     -d '{"items": {"prod_1": "First document segment.", "prod_2": "Second document segment."}}'
 ```
 **Response:**
 ```json
 {
-  "vectors": [
-    [0.0123, ...],
-    [-0.0789, ...]
-  ]
+  "vectors": {
+    "prod_1": [0.0123, ...],
+    "prod_2": [-0.0789, ...]
+  }
 }
 ```
 

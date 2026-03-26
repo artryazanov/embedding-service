@@ -65,6 +65,53 @@ def test_vectorize_batch_success(client):
         mock_encode.assert_called_once_with(["text1", "text2"])
 
 
+def test_vectorize_batch_dict_success(client):
+    engine.model = True
+
+    with patch(
+        "main.engine.encode_batch_chunked_async",
+        new_callable=AsyncMock,
+        return_value=[[0.1, 0.1], [0.2, 0.2]],
+    ) as mock_encode:
+        response = client.post(
+            "/vectorize-batch", json={"items": {"id1": "text1", "id2": "text2"}}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "vectors" in data
+        assert isinstance(data["vectors"], dict)
+        assert "id1" in data["vectors"]
+        assert "id2" in data["vectors"]
+        assert data["vectors"]["id1"] == [0.1, 0.1]
+        mock_encode.assert_called_once_with(["text1", "text2"])
+
+
+def test_vectorize_batch_objects_success(client):
+    engine.model = True
+
+    with patch(
+        "main.engine.encode_batch_chunked_async",
+        new_callable=AsyncMock,
+        return_value=[[0.1, 0.1], [0.2, 0.2]],
+    ) as mock_encode:
+        response = client.post(
+            "/vectorize-batch",
+            json={
+                "items": [
+                    {"id": "id1", "text": "text1"},
+                    {"id": "id2", "text": "text2"},
+                ]
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "vectors" in data
+        assert isinstance(data["vectors"], list)
+        assert data["vectors"][0]["id"] == "id1"
+        assert data["vectors"][0]["vector"] == [0.1, 0.1]
+        mock_encode.assert_called_once_with(["text1", "text2"])
+
+
 def test_verify_token(client):
     with patch("main.settings.api_token", new="supersecret"):
         response = client.get("/health")
