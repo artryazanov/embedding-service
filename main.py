@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -107,7 +107,8 @@ async def vectorize_batch(req: BatchTextRequest):
         elif isinstance(req.items, list):
             if isinstance(req.items[0], str):
                 # Legacy List[str] format
-                vectors = await engine.encode_batch_chunked_async(req.items)  # type: ignore
+                items = req.items  # type: ignore
+                vectors = await engine.encode_batch_chunked_async(items)
                 return {"vectors": vectors}
             else:
                 # List[ItemRequest] format
