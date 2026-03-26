@@ -107,7 +107,7 @@ async def vectorize_batch(req: BatchTextRequest):
         elif isinstance(req.items, list):
             if isinstance(req.items[0], str):
                 # Legacy List[str] format
-                items = req.items  # type: ignore
+                items: List[str] = req.items  # type: ignore
                 vectors = await engine.encode_batch_chunked_async(items)
                 return {"vectors": vectors}
             else:

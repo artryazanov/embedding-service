@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingEngine:
-    def __init__(self):
+    def __init__(self) -> None:
         self.model: Optional[SentenceTransformer] = None
         self._set_device()
 
@@ -21,7 +21,7 @@ class EmbeddingEngine:
         # and crashing the server due to Out Of Memory (OOM).
         self._batch_lock = asyncio.Lock()
 
-    def _set_device(self):
+    def _set_device(self) -> None:
         if settings.device == "auto":
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         else:
