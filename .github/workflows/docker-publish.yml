@@ -10,7 +10,15 @@ on:
   workflow_dispatch:
 
 jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+
+  test:
+    uses: ./.github/workflows/tests.yml
+    secrets: inherit
+
   build:
+    needs: [lint, test]
     runs-on: ubuntu-latest
     permissions:
       contents: read
