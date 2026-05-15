@@ -58,4 +58,3 @@ jobs:
             registry.gitlab.artryazanov.ru/maxfishing/embedding-service:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          provenance: false
