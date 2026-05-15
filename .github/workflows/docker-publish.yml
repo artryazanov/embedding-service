@@ -38,13 +38,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Login to GitLab Container Registry
+      - name: Login to GitLab Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.gitlab.artryazanov.ru
+          username: ${{ secrets.GITLAB_USERNAME }}
+          password: ${{ secrets.GITLAB_TOKEN }}
+
       - name: Build Docker image
         uses: docker/build-push-action@v7
         with:
           context: .
           # Push only if it's a branch push (not a Pull Request)
           push: ${{ github.event_name != 'pull_request' }}
-          # Use full registry name
-          tags: ghcr.io/artryazanov/embedding-service:latest
+          # Use full registry names
+          tags: |
+            ghcr.io/artryazanov/embedding-service:latest
+            registry.gitlab.artryazanov.ru/maxfishing/embedding-service:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
