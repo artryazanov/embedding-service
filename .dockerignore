@@ -1,0 +1,14 @@
+.git
+.gitignore
+.dockerignore
+.env
+.idea
+.venv
+venv
+__pycache__
+.pytest_cache
+.mypy_cache
+.coverage
+htmlcov
+coverage.xml
+models/
