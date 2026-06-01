@@ -1,7 +1,16 @@
 name: Lint
 
 on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - '.gitignore'
+      - 'LICENSE'
+      - '.dockerignore'
   workflow_call:
+  workflow_dispatch:
 
 jobs:
   lint:
