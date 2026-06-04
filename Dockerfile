@@ -21,10 +21,6 @@ RUN if [ "$DEVICE" = "cpu" ]; then \
         pip install --no-cache-dir -r requirements.txt; \
     fi
 
-# Pre-download the bge-m3 model so it's baked into the image
-RUN python -c "import os; os.makedirs('./models', exist_ok=True); from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-m3').save('./models/BAAI_bge-m3')" \
-    && rm -rf /root/.cache/huggingface
-
 COPY . .
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
